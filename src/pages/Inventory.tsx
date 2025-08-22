@@ -1,12 +1,32 @@
-import React, { useMemo, useState } from 'react';
-import { Box, Typography, Paper, TextField, Button, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem, Checkbox, FormControlLabel } from '@mui/material';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Box, 
+  Typography, 
+  Paper, 
+  TextField, 
+  Button, 
+  IconButton, 
+  Dialog, 
+  DialogTitle, 
+  DialogContent, 
+  DialogActions, 
+  Card,
+  CardContent,
+  Tooltip,
+  Chip,
+} from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import InfoIcon from '@mui/icons-material/Info';
-import { useNavigate } from 'react-router-dom';
-import { styled } from '@mui/material/styles';
+import QrCodeIcon from '@mui/icons-material/QrCode';
 import * as XLSX from 'xlsx';
+import { useNavigate } from 'react-router-dom';
+import { 
+  getBufferRows, 
+  saveBufferRows
+} from '../storage/inventoryBufferStorage';
+import { getEquipment, updateEquipment } from '../storage/equipmentStorage';
+import { getEntities } from '../storage/entitiesStorage';
+import { getStatuses } from '../storage/statusStorage';
+import BulkOperations, { BulkOperation } from '../components/BulkOperations';
 
 type EquipmentType = 'Компьютер' | 'Монитор' | 'Устройство';
 
@@ -14,9 +34,16 @@ interface FoundItem {
   id: number;
   type: EquipmentType;
   name: string;
+  inventoryNumber?: string;
+  serialNumber?: string;
+  department?: string;
+  status?: string;
+  location?: string;
   otherserial?: string;
   serial?: string;
   groups_id?: string;
+  comment?: string;
+  user?: string;
 }
 
 interface BufferRow {
@@ -25,161 +52,446 @@ interface BufferRow {
   status: 'search' | 'found' | 'not_found' | 'duplicate';
   display?: string;
   item?: FoundItem;
-  attrs?: Record<string, string>;
 }
 
-const mockDB: FoundItem[] = [
-  { id: 1, type: 'Компьютер', name: 'Dell Latitude 5520', otherserial: 'DL5520-001', serial: 'ABC123' },
-  { id: 2, type: 'Устройство', name: 'HP LaserJet Pro M404n', otherserial: 'HP404-002', serial: 'HP404SN' },
-  { id: 3, type: 'Монитор', name: 'Samsung S24F350', otherserial: 'SM24-003', serial: 'SM24SN' },
-];
 
-const StatusChip = ({ status }: { status: BufferRow['status'] }) => {
-  switch (status) {
-    case 'search':
-      return <Chip label="Поиск..." color="warning" size="small" />;
-    case 'found':
-      return <Chip label="Найден" color="success" size="small" icon={<CheckCircleIcon />} />;
-    case 'not_found':
-      return <Chip label="Не найден" color="error" size="small" icon={<ErrorIcon />} />;
-    case 'duplicate':
-      return <Chip label="Дубликат" size="small" />;
-    default:
-      return null;
-  }
-};
-
-const Row = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  gap: theme.spacing(2),
-  padding: theme.spacing(1.25),
-  borderRadius: 8,
-  background: theme.palette.mode === 'light' ? '#fff' : theme.palette.background.paper,
-  border: '1px solid rgba(0,0,0,0.06)'
-}));
 
 const Inventory = () => {
-  const navigate = useNavigate();
-  const [input, setInput] = useState('');
   const [rows, setRows] = useState<BufferRow[]>([]);
-  const [massEditOpen, setMassEditOpen] = useState(false);
-  const [importExportOpen, setImportExportOpen] = useState(false);
-  const [massField, setMassField] = useState<string>('comment');
-  const [massOp, setMassOp] = useState<'replace' | 'append' | 'clear' | 'set' | 'unset'>('replace');
-  const [massValue, setMassValue] = useState('');
-  const [importSource, setImportSource] = useState<'clipboard' | 'csv' | 'txt' | 'xlsx'>('clipboard');
-  const [clipboardText, setClipboardText] = useState('');
-  const [uploadedData, setUploadedData] = useState<Array<Record<string, any>>>([]);
-  const [selectedColumn, setSelectedColumn] = useState<string>('');
-  const [exportFormat, setExportFormat] = useState<'csv' | 'txt' | 'xlsx'>('csv');
-  const [exportColumns, setExportColumns] = useState<Record<string, boolean>>({ input: true, status: true, otherserial: true, serial: true, name: false, comment: false, location: false, department: false, type: false });
+  const [inputValue, setInputValue] = useState('');
+  const [foundItems, setFoundItems] = useState<Record<string, any>>({});
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const navigate = useNavigate();
 
-  const foundKeys = useMemo(() => new Set(rows.filter(r => r.status === 'found').map(r => r.item?.otherserial || r.item?.serial)), [rows]);
+  // Диалог выбора при множественных совпадениях
+  const [selectionDialog, setSelectionDialog] = useState<{
+    open: boolean;
+    searchValue: string;
+    options: any[];
+  }>({ open: false, searchValue: '', options: [] });
 
-  const addSerial = () => {
-    const s = input.trim().replace(/^0+/, '');
-    if (!s) return;
+  // Диалог массовых операций
+  const [bulkOperationsOpen, setBulkOperationsOpen] = useState(false);
 
-    const key = `${s}_${rows.length}`;
-    const newRow: BufferRow = { key, input: s, status: 'search' };
-    setRows(prev => [newRow, ...prev]);
-    setInput('');
+  // Функция для получения цвета статуса (как в EquipmentList)
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Активно':
+        return 'success';
+      case 'Ремонт':
+      case 'В ремонте':
+        return 'warning';
+      case 'Списано':
+      case 'Списан':
+        return 'error';
+      case 'Неактивно':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
 
-    // Поиск по mockDB (вместо API)
-    setTimeout(() => {
-      const matches = mockDB.filter(i => (i.otherserial && i.otherserial.includes(s)) || (i.serial && i.serial.includes(s)));
-      if (matches.length === 0) {
-        setRows(prev => prev.map(r => r.key === key ? { ...r, status: 'not_found' } : r));
-      } else {
-        const item = matches[0];
-        const itemKey = item.otherserial || item.serial;
-        const duplicate = itemKey && Array.from(foundKeys).includes(itemKey);
-        setRows(prev => prev.map(r => r.key === key ? {
-          ...r,
-          status: duplicate ? 'duplicate' : 'found',
-          item,
-          display: `${item.type} ${item.name}`,
-        } : r));
+  // Получаем найденные элементы для массовых операций
+  const getFoundEquipment = useCallback(() => {
+    return rows
+      .filter(row => row.status === 'found' && row.item)
+      .map(row => ({
+        id: row.item!.id.toString(),
+        name: row.item!.name,
+        type: row.item!.type,
+        department: row.item!.department,
+        status: row.item!.status,
+        location: row.item!.location || '',
+        inventoryNumber: row.item!.inventoryNumber,
+        comment: row.item!.comment,
+        user: row.item!.user,
+        ...row.item
+      }));
+  }, [rows]);
+
+  // Получаем доступные опции для массовых операций
+  const getAvailableOptions = useCallback(() => {
+    const entities = getEntities();
+    const statuses = getStatuses();
+    
+    return {
+      statuses: statuses.map(s => s.name),
+      locations: entities.locations.map(l => l.name),
+      types: entities.types.map(t => t.name),
+      departments: entities.departments.map(d => d.name),
+      users: entities.users?.map(u => u.name) || []
+    };
+  }, []);
+
+  // Обработка массовых операций
+  const handleBulkOperation = useCallback(async (operation: BulkOperation) => {
+    const foundEquipment = getFoundEquipment();
+    
+    try {
+      for (const equipment of foundEquipment) {
+        const updates: any = {};
+        
+        switch (operation.type) {
+          case 'status':
+            updates.status = operation.value;
+            break;
+          case 'location':
+            updates.location = operation.value;
+            break;
+          case 'comment':
+            updates.comment = operation.value;
+            break;
+          case 'assign':
+            updates.user = operation.value;
+            break;
+          case 'export':
+            // Экспорт обрабатывается отдельно
+            continue;
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          updateEquipment(equipment.id.toString(), updates);
+        }
       }
+      
+      // Обновляем буфер с новыми данными
+      const updatedRows = rows.map(row => {
+        if (row.status === 'found' && row.item) {
+          const updatedEquipment = getEquipment().find(eq => eq.id === row.item!.id.toString());
+          if (updatedEquipment) {
+            return {
+              ...row,
+                              item: {
+                  ...row.item,
+                  status: updatedEquipment.status,
+                  location: updatedEquipment.location,
+                  type: updatedEquipment.type as EquipmentType,
+                  department: updatedEquipment.department,
+                  comment: updatedEquipment.comment,
+                  user: updatedEquipment.user
+                }
+            };
+          }
+        }
+        return row;
+      });
+      
+      setRows(updatedRows);
+      saveBufferRows(updatedRows);
+      
+      // Показываем уведомление об успехе
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'success',
+          title: 'Массовая операция выполнена',
+          message: `Обновлено ${foundEquipment.length} элементов`
+        });
+      }
+      
+    } catch (error) {
+      console.error('Ошибка массовой операции:', error);
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'error',
+          title: 'Ошибка массовой операции',
+          message: 'Не удалось выполнить операцию'
+        });
+      }
+      throw error;
+    }
+  }, [rows, getFoundEquipment]);
+
+  // Загружаем данные из хранилища при инициализации и при каждом монтировании
+  useEffect(() => {
+    const savedRows = getBufferRows();
+    if (savedRows && savedRows.length > 0) {
+      setRows(savedRows);
+    }
+  }, []);
+
+  // Сохраняем данные в хранилище при изменении
+  useEffect(() => {
+    // Используем setTimeout чтобы избежать множественных сохранений при быстрых изменениях
+    const timeoutId = setTimeout(() => {
+      saveBufferRows(rows);
     }, 100);
-  };
+    
+    return () => clearTimeout(timeoutId);
+  }, [rows]);
 
-  const pushSerial = (s: string) => {
-    const key = `${s}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-    const newRow: BufferRow = { key, input: s, status: 'search' };
-    setRows(prev => [newRow, ...prev]);
-    setTimeout(() => {
-      const matches = mockDB.filter(i => (i.otherserial && i.otherserial.includes(s)) || (i.serial && i.serial.includes(s)));
-      if (matches.length === 0) {
-        setRows(prev => prev.map(r => r.key === key ? { ...r, status: 'not_found' } : r));
-      } else {
-        const item = matches[0];
-        const itemKey = item.otherserial || item.serial;
-        const duplicate = itemKey && Array.from(foundKeys).includes(itemKey);
-        setRows(prev => prev.map(r => r.key === key ? { ...r, status: duplicate ? 'duplicate' : 'found', item, display: `${item.type} ${item.name}` } : r));
+  // Поиск только по инвентарному и серийному номерам (как в референсе)
+  const searchEquipmentByNumbers = useCallback((query: string) => {
+    const equipment = getEquipment();
+    const searchTerm = query.replace(/^0+/, '') || query; // Нормализация как в референсе
+    
+    const results: Array<{ type: string; item: any }> = [];
+    
+    equipment.forEach(item => {
+      const otherserial = (item.inventoryNumber || '').replace(/^0+/, '') || (item.inventoryNumber || '');
+      const serial = (item.serialNumber || '').replace(/^0+/, '') || (item.serialNumber || '');
+      
+      // Проверяем совпадение как по инвентарному, так и по серийному номеру (как в референсе)
+      if ((otherserial && otherserial.includes(searchTerm)) || (serial && serial.includes(searchTerm))) {
+        results.push({
+          type: item.type || 'Устройство',
+          item: item
+        });
       }
-    }, 50);
+    });
+    
+    return results;
+  }, []);
+
+  const addSerial = useCallback(() => {
+    if (!inputValue.trim()) return;
+    
+    // Нормализуем введенный номер (убираем ведущие нули как в референсе)
+    const s = inputValue.trim().replace(/^0+/, '') || inputValue.trim();
+    
+    // Генерируем уникальный ключ для буфера
+    const bufferKey = `${s}_${Date.now()}`;
+    
+    // Создаем новую строку в состоянии "поиск"
+    const searchRow: BufferRow = {
+      key: bufferKey,
+      input: s,
+      status: 'search'
+    };
+    
+    // Добавляем строку в буфер
+    setRows(prev => [...prev, searchRow]);
+    setInputValue('');
+    
+    // Выполняем поиск
+    const foundEquipment = searchEquipmentByNumbers(s);
+    
+    if (foundEquipment.length === 0) {
+      // Не найдено
+      setRows(prev => prev.map(row => 
+        row.key === bufferKey 
+          ? { ...row, status: 'not_found' }
+          : row
+      ));
+    } else if (foundEquipment.length === 1) {
+      // Одно совпадение - проверяем на дубликат
+      const equipmentData = foundEquipment[0];
+      const equipment = equipmentData.item;
+      
+      // Определяем ключевой серийный номер (как в референсе)
+      const otherserial = (equipment.inventoryNumber || '').replace(/^0+/, '') || (equipment.inventoryNumber || '');
+      const serial = (equipment.serialNumber || '').replace(/^0+/, '') || (equipment.serialNumber || '');
+      const keySerial = otherserial || serial;
+      
+      // Проверяем дубликат по уже найденному оборудованию (как в референсе)
+      const isDuplicate = keySerial in foundItems;
+      
+      if (isDuplicate) {
+        // Дубликат - обновляем с реальными данными оборудования
+        setRows(prev => prev.map(row => 
+          row.key === bufferKey 
+            ? { 
+                ...row, 
+                status: 'duplicate',
+                item: {
+                  id: equipment.id,
+                  type: equipment.type as EquipmentType,
+                  name: equipment.name,
+                  inventoryNumber: equipment.inventoryNumber,
+                  serialNumber: equipment.serialNumber,
+                  department: equipment.department,
+                  status: equipment.status
+                } as any
+              }
+            : row
+        ));
+      } else {
+        // Найдено - добавляем в foundItems и обновляем строку
+        setFoundItems(prev => ({ ...prev, [keySerial]: equipmentData }));
+        
+        setRows(prev => prev.map(row => 
+          row.key === bufferKey 
+            ? { 
+                ...row, 
+                status: 'found',
+                item: {
+                  id: equipment.id,
+                  type: equipmentData.type as EquipmentType,
+                  name: equipment.name,
+                  inventoryNumber: equipment.inventoryNumber,
+                  serialNumber: equipment.serialNumber,
+                  department: equipment.department,
+                  status: equipment.status
+                }
+              }
+            : row
+        ));
+      }
+    } else {
+      // Множественные совпадения - показываем диалог выбора
+      setSelectionDialog({
+        open: true,
+        searchValue: s,
+        options: foundEquipment
+      });
+      
+      // Удаляем временную строку поиска
+      setRows(prev => prev.filter(row => row.key !== bufferKey));
+    }
+  }, [inputValue, searchEquipmentByNumbers, foundItems]);
+
+  // Функции для диалога выбора
+  const handleSelectionDialogClose = () => {
+    setSelectionDialog({ open: false, searchValue: '', options: [] });
   };
 
-  const removeRow = (key: string) => setRows(prev => prev.filter(r => r.key !== key));
-
-  const clearBuffer = () => setRows([]);
-
-  const removeNonGreen = () => setRows(prev => prev.filter(r => r.status === 'found').filter((r, idx, arr) => {
-    const id = r.item?.otherserial || r.item?.serial;
-    return id && arr.findIndex(x => (x.item?.otherserial || x.item?.serial) === id) === idx;
-  }));
-
-  const applyMassEdit = () => {
-    setRows(prev => prev.map(r => {
-      if (r.status !== 'found') return r;
-      const current = r.attrs?.[massField] || '';
-      let nextVal = current;
-      if (massOp === 'replace' || massOp === 'set') nextVal = massValue;
-      if (massOp === 'append') nextVal = current ? `${current}\n${massValue}` : massValue;
-      if (massOp === 'clear' || massOp === 'unset') nextVal = '';
-      return { ...r, attrs: { ...(r.attrs || {}), [massField]: nextVal } };
-    }));
-    setMassEditOpen(false);
+  const handleSelectEquipment = (equipmentData: any) => {
+    const equipment = equipmentData.item;
+    const s = selectionDialog.searchValue;
+    
+    // Определяем ключевой серийный номер (как в референсе)
+    const otherserial = (equipment.inventoryNumber || '').replace(/^0+/, '') || (equipment.inventoryNumber || '');
+    const serial = (equipment.serialNumber || '').replace(/^0+/, '') || (equipment.serialNumber || '');
+    const keySerial = otherserial || serial;
+    
+    // Проверяем дубликат по уже найденному оборудованию (как в референсе)
+    const isDuplicate = keySerial in foundItems;
+    
+    const bufferKey = `${s}_${Date.now()}`;
+    
+    if (isDuplicate) {
+      // Дубликат - с реальными данными оборудования
+      const newRow: BufferRow = {
+        key: bufferKey,
+        input: s,
+        status: 'duplicate',
+        item: {
+          id: equipment.id,
+          type: equipment.type as EquipmentType,
+          name: equipment.name,
+          inventoryNumber: equipment.inventoryNumber,
+          serialNumber: equipment.serialNumber,
+          department: equipment.department,
+          status: equipment.status
+        } as any
+      };
+      setRows(prev => [...prev, newRow]);
+    } else {
+      // Найдено - добавляем в foundItems
+      setFoundItems(prev => ({ ...prev, [keySerial]: equipmentData }));
+      
+      const newRow: BufferRow = {
+        key: bufferKey,
+        input: s,
+        status: 'found',
+        item: {
+          id: equipment.id,
+          type: equipmentData.type as EquipmentType,
+          name: equipment.name,
+          inventoryNumber: equipment.inventoryNumber,
+          serialNumber: equipment.serialNumber,
+          department: equipment.department,
+          status: equipment.status
+        }
+      };
+      setRows(prev => [...prev, newRow]);
+    }
+    
+    handleSelectionDialogClose();
   };
+
+  const removeRow = useCallback((key: string) => {
+    // Находим удаляемую строку
+    const rowToRemove = rows.find(r => r.key === key);
+    
+    if (rowToRemove && rowToRemove.item && rowToRemove.status === 'found') {
+      // Если это найденный элемент, удаляем его из foundItems
+      const equipment = rowToRemove.item;
+      const otherserial = (equipment.inventoryNumber || '').replace(/^0+/, '') || (equipment.inventoryNumber || '');
+      const serial = (equipment.serialNumber || '').replace(/^0+/, '') || (equipment.serialNumber || '');
+      const keySerial = otherserial || serial;
+      
+      setFoundItems(prev => {
+        const newFoundItems = { ...prev };
+        delete newFoundItems[keySerial];
+        return newFoundItems;
+      });
+    }
+    
+    // Удаляем строку из буфера
+    setRows(prev => prev.filter(r => r.key !== key));
+  }, [rows]);
+
+  const clearBufferData = useCallback(() => {
+    setRows([]);
+    setFoundItems({});
+  }, []);
+
+  const removeNonGreenData = useCallback(() => {
+    // Оставляем только найденные элементы и обновляем foundItems соответственно
+    const foundRows = rows.filter(r => r.status === 'found');
+    setRows(foundRows);
+    
+    // Обновляем foundItems, оставляя только элементы из найденных строк
+    const newFoundItems: Record<string, any> = {};
+    foundRows.forEach(row => {
+      if (row.item) {
+        const equipment = row.item;
+        const otherserial = (equipment.inventoryNumber || '').replace(/^0+/, '') || (equipment.inventoryNumber || '');
+        const serial = (equipment.serialNumber || '').replace(/^0+/, '') || (equipment.serialNumber || '');
+        const keySerial = otherserial || serial;
+        
+        if (keySerial in foundItems) {
+          newFoundItems[keySerial] = foundItems[keySerial];
+        }
+      }
+    });
+    setFoundItems(newFoundItems);
+  }, [rows, foundItems]);
+
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const ext = file.name.toLowerCase().split('.').pop();
-    if (ext === 'xlsx' || ext === 'xls') {
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Array<Record<string, any>>;
-      setUploadedData(json);
-      const cols = Object.keys(json[0] || {});
-      setSelectedColumn(cols[0] || '');
-      setImportSource('xlsx');
-    } else if (ext === 'csv' || ext === 'txt') {
-      const text = await file.text();
-      const rows = text.split(/\r?\n/).filter(Boolean).map(line => ({ value: line.trim() }));
-      setUploadedData(rows);
-      setSelectedColumn('value');
-      setImportSource(ext as any);
-    }
-    // reset input value so same file can be reselected
-    e.currentTarget.value = '' as any;
+    
+    setSelectedFile(file);
+    setImportDialogOpen(true);
   };
 
   const doImport = async () => {
-    let values: string[] = [];
-    if (importSource === 'clipboard') {
-      values = clipboardText.split(/\r?\n|\t|,|;+/).map(s => s.trim()).filter(Boolean);
-    } else {
-      values = uploadedData.map(r => String(r[selectedColumn] ?? '').trim()).filter(Boolean);
+    if (!selectedFile) return;
+    
+    try {
+      const data = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      setImportProgress(50);
+      
+      // Обрабатываем импортированные данные
+      const newRows: BufferRow[] = jsonData.map((row: any, index: number) => ({
+        key: Date.now().toString() + index,
+        input: row.serial || row.inventory || row.name || String(row),
+        status: 'search'
+      }));
+      
+      setImportProgress(100);
+      
+      // Добавляем новые строки
+      setRows(prev => [...prev, ...newRows]);
+      
+      setTimeout(() => {
+        setImportDialogOpen(false);
+        setImportProgress(0);
+        setSelectedFile(null);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Ошибка импорта:', error);
     }
-    values = values.map(v => v.replace(/^0+/, ''));
-    values.forEach(v => pushSerial(v));
-    setImportExportOpen(false);
-    setClipboardText('');
-    setUploadedData([]);
   };
 
   const download = (blob: Blob, filename: string) => {
@@ -187,40 +499,37 @@ const Inventory = () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
   const doExport = () => {
-    const data = rows.map(r => ({
-      input: r.input,
-      status: r.status,
-      otherserial: r.item?.otherserial || '',
-      serial: r.item?.serial || '',
-      name: r.item?.name || '',
-      type: r.item?.type || '',
-      comment: r.attrs?.comment || '',
-      location: r.attrs?.location || '',
-      department: r.attrs?.department || '',
+    const data = rows.map(row => ({
+      'Инвентарный номер': row.input,
+      'Статус поиска': row.status === 'found' ? 'Найдено' : 
+                row.status === 'not_found' ? 'Не найдено' : 
+                row.status === 'duplicate' ? 'Дубликат' : 'Поиск',
+      'Наименование': row.item?.name || '',
+      'Департамент': row.item?.department || '',
+      'Статус оборудования': row.item?.status || ''
     }));
-    const headers = Object.keys(exportColumns).filter(k => exportColumns[k]);
-    if (exportFormat === 'csv' || exportFormat === 'txt') {
-      const sep = exportFormat === 'csv' ? ';' : '\t';
-      const lines = [headers.join(sep), ...data.map(row => headers.map(h => `${String((row as any)[h] ?? '').replace(/"/g,'""')}`).join(sep))];
-      const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-      download(blob, `inventory.${exportFormat}`);
-    } else {
-      const ws = XLSX.utils.json_to_sheet(data.map(row => {
-        const obj: any = {};
-        headers.forEach(h => { obj[h] = (row as any)[h]; });
-        return obj;
-      }));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
-      XLSX.writeFile(wb, 'inventory.xlsx');
-    }
-    setImportExportOpen(false);
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Инвентаризация');
+    
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    download(blob, `inventory_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
+
+  const totalCount = rows.length;
+  const foundCount = rows.filter(r => r.status === 'found').length;
+  const notFoundCount = rows.filter(r => r.status === 'not_found').length;
+  const duplicateCount = rows.filter(r => r.status === 'duplicate').length;
 
   return (
     <Box>
@@ -228,179 +537,502 @@ const Inventory = () => {
         Инвентаризация
       </Typography>
 
-      <Paper sx={{ p: 2, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField
-          label="Инвентарный/серийный номер"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') addSerial(); }}
-          sx={{ minWidth: 320, flexGrow: 1 }}
-        />
-        <Button variant="contained" onClick={addSerial}>Добавить</Button>
-        <Button variant="outlined" onClick={clearBuffer}>Очистить</Button>
-        <Button variant="outlined" onClick={removeNonGreen}>Убрать лишние</Button>
-        <Button variant="outlined" onClick={() => setMassEditOpen(true)}>Действия</Button>
-        <Button variant="outlined" onClick={() => setImportExportOpen(true)}>Импорт/Экспорт</Button>
-      </Paper>
+      {/* Статистика */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+        <Paper sx={{ p: 2, minWidth: 120, textAlign: 'center' }}>
+          <Typography variant="h6" color="primary.main">{totalCount}</Typography>
+          <Typography variant="body2" color="text.secondary">Всего</Typography>
+        </Paper>
+        <Paper sx={{ p: 2, minWidth: 120, textAlign: 'center' }}>
+          <Typography variant="h6" color="success.main">{foundCount}</Typography>
+          <Typography variant="body2" color="text.secondary">Найдено</Typography>
+        </Paper>
+        <Paper sx={{ p: 2, minWidth: 120, textAlign: 'center' }}>
+          <Typography variant="h6" color="error.main">{notFoundCount}</Typography>
+          <Typography variant="body2" color="text.secondary">Не найдено</Typography>
+        </Paper>
+        <Paper sx={{ p: 2, minWidth: 120, textAlign: 'center' }}>
+          <Typography variant="h6" color="info.main">{duplicateCount}</Typography>
+          <Typography variant="body2" color="text.secondary">Дубликаты</Typography>
+        </Paper>
+      </Box>
 
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="subtitle1" sx={{ mb: 2 }}>Буфер</Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {rows.map(r => (
-            <Row key={r.key}>
-              <Typography variant="body1" sx={{ fontWeight: 600, minWidth: 200 }}>{r.input}</Typography>
-              <StatusChip status={r.status} />
-              {r.display && <Typography variant="body2" color="text.secondary">{r.display}</Typography>}
-              {r.item && r.status === 'found' && (
-                <Button size="small" startIcon={<InfoIcon />} onClick={() => navigate(`/equipment/${r.item?.id}`)}>
-                  Открыть
-                </Button>
-              )}
-              <Box sx={{ ml: 'auto' }} />
-              <IconButton onClick={() => removeRow(r.key)}><DeleteIcon /></IconButton>
-            </Row>
-          ))}
+      {/* Управление */}
+      <Paper sx={{ p: 3, mb: 3 }}>
+        {/* Ввод и основные действия */}
+        <Box sx={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr auto auto auto', 
+          gap: 2, 
+          mb: 3, 
+          alignItems: 'center',
+          '@media (max-width: 768px)': {
+            gridTemplateColumns: '1fr',
+            gap: 1
+          }
+        }}>
+        <TextField
+            label="Добавить инвентарный номер"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && addSerial()}
+            placeholder="Введите номер и нажмите Enter"
+            helperText="Поиск только по инвентарному номеру и серийному номеру"
+            fullWidth
+          />
+          <Button variant="contained" onClick={addSerial} disabled={!inputValue.trim()}>
+            Добавить
+          </Button>
+          <Button variant="outlined" onClick={() => setImportDialogOpen(true)}>
+            Импорт
+          </Button>
+          <Button variant="outlined" onClick={doExport} disabled={rows.length === 0}>
+            Экспорт
+          </Button>
+        </Box>
+
+        {/* Дополнительные действия */}
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, 
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button 
+              variant="outlined" 
+              color="error" 
+              onClick={clearBufferData}
+              disabled={rows.length === 0}
+              size="small"
+            >
+              Очистить буфер
+            </Button>
+            <Button 
+              variant="outlined" 
+              color="warning" 
+              onClick={removeNonGreenData}
+              disabled={rows.filter(r => r.status !== 'found').length === 0}
+              size="small"
+            >
+              Убрать не зеленые
+            </Button>
+          </Box>
+          
+          <Button 
+            variant="outlined" 
+            onClick={() => {
+              const foundRows = rows.filter(r => r.status === 'found');
+              if (foundRows.length === 0) {
+                alert('Нет найденных позиций для массовых операций');
+                return;
+              }
+              
+              setBulkOperationsOpen(true);
+            }} 
+            disabled={rows.length === 0}
+          >
+            Действия
+          </Button>
         </Box>
       </Paper>
 
-      {/* Диалог массовых изменений */}
-      <Dialog open={massEditOpen} onClose={() => setMassEditOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Действия</DialogTitle>
+      {/* Буфер позиций */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {rows.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+              Буфер пуст
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Добавьте инвентарные номера для начала работы
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              💡 Введите номер в поле выше и нажмите Enter или кнопку "Добавить"
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              💡 Поиск работает только по инвентарному номеру и серийному номеру
+                </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              💡 Кликните на наименование для перехода в карточку техники
+                  </Typography>
+          </Paper>
+        ) : (
+          rows.map((row, index) => (
+            <Card 
+              key={row.key}
+              sx={{ 
+                border: '1px solid',
+                borderColor: row.status === 'found' ? 'success.light' : 
+                             row.status === 'not_found' ? 'error.light' : 
+                             row.status === 'duplicate' ? 'grey.300' : 'warning.light',
+                backgroundColor: row.status === 'found' ? 'rgba(76, 175, 80, 0.08)' : 
+                                row.status === 'not_found' ? 'rgba(244, 67, 54, 0.08)' : 
+                                row.status === 'duplicate' ? 'rgba(158, 158, 158, 0.08)' : 'rgba(255, 152, 0, 0.08)',
+                mb: 1,
+                boxShadow: 2,
+                '&:hover': {
+                  boxShadow: 4,
+                  transform: 'translateY(-1px)',
+                },
+                transition: 'all 0.2s ease',
+                animation: 'fadeInUp 0.3s ease-out',
+                '@keyframes fadeInUp': {
+                  '0%': {
+                    opacity: 0,
+                    transform: 'translateY(10px)',
+                  },
+                  '100%': {
+                    opacity: 1,
+                    transform: 'translateY(0)',
+                  },
+                },
+              }}
+            >
+              <CardContent sx={{ p: 1, py: 0.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '32px' }}>
+                  {/* Левая часть - информация */}
+                  <Box sx={{ flex: 1 }}>
+                    {/* Все данные в одну строку с отступами */}
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        flexWrap: 'wrap',
+                        lineHeight: 1.2
+                      }}
+                    >
+                      {/* Инвентарный номер - жирным */}
+                      <Typography 
+                        component="span" 
+                        sx={{ 
+                          fontWeight: 700,
+                          color: 'text.primary',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        {row.item?.inventoryNumber || row.input}
+                      </Typography>
+                      
+                      {/* Разделитель */}
+                      <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
+                      
+                      {/* Департамент - жирным */}
+                      <Typography 
+                        component="span" 
+                        sx={{ 
+                          fontWeight: 700,
+                          color: 'text.primary',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        {row.item?.department || 'Не указано'}
+                      </Typography>
+                      
+                      {/* Наименование - кликабельно */}
+                      {row.item?.name && row.status === 'found' && (
+                        <>
+                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
+                          <Typography 
+                            component="span"
+                            sx={{ 
+                              color: 'primary.main',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                              fontSize: '0.875rem',
+                              '&:hover': { 
+                                color: 'primary.dark',
+                                textDecoration: 'none'
+                              }
+                            }}
+                            onClick={() => navigate(`/equipment/${row.item!.id}`)}
+                          >
+                            {row.item.name}
+                  </Typography>
+                        </>
+                      )}
+                      
+
+                      
+                      {/* Статус оборудования или статус поиска */}
+                      {(row.item?.status || row.status !== 'found') && (
+                        <>
+                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
+                          {row.item?.status ? (
+                            <Chip 
+                              label={row.item.status} 
+                              color={getStatusColor(row.item.status) as any} 
+                              size="small" 
+                              sx={{ ml: 0.5 }}
+                            />
+                          ) : (
+                            <Chip 
+                              label={
+                                row.status === 'not_found' ? 'Не найдено' : 
+                                row.status === 'duplicate' ? 'Дубликат' : 
+                                'Поиск...'
+                              }
+                              color={
+                                row.status === 'not_found' ? 'error' : 
+                                row.status === 'duplicate' ? 'default' : 
+                                'warning'
+                              }
+                              size="small" 
+                              sx={{ ml: 0.5 }}
+                            />
+                          )}
+                        </>
+                      )}
+
+                      {/* Местоположение */}
+                      {row.item?.location && (
+                        <>
+                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
+                          <Typography 
+                            component="span" 
+                            sx={{ 
+                              color: 'text.primary',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            {row.item.location}
+                          </Typography>
+                        </>
+                      )}
+
+                      {/* Пользователь */}
+                      {row.item?.user && (
+                        <>
+                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
+                          <Typography 
+                            component="span" 
+                            sx={{ 
+                              color: 'text.primary',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            {row.item.user}
+                          </Typography>
+                        </>
+                      )}
+                    </Typography>
+              </Box>
+
+              {/* Правая часть - кнопки */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, ml: 2 }}>
+                                      <Tooltip title="Показать штрих-код">
+                  <IconButton
+                      size="small"
+                    color="primary"
+                      onClick={() => {
+                        if (row.item?.inventoryNumber) {
+                          // Открываем новое окно с штрих-кодом
+                          const newWindow = window.open('', '_blank', 'width=400,height=300');
+                          if (newWindow) {
+                            newWindow.document.write(`
+                              <!DOCTYPE html>
+                              <html>
+                                <head>
+                                  <title>Штрих-код ${row.item.inventoryNumber}</title>
+                                  <style>
+                                    body { 
+                                      font-family: Arial, sans-serif; 
+                                      text-align: center; 
+                                      padding: 20px;
+                                      background: white;
+                                    }
+                                    .barcode-container {
+                                      margin: 20px 0;
+                                      padding: 20px;
+                                      border: 1px solid #ccc;
+                                      border-radius: 8px;
+                                    }
+                                    .inventory-number {
+                                      font-size: 18px;
+                                      font-weight: bold;
+                                      margin-bottom: 10px;
+                                    }
+                                    .barcode {
+                                      margin: 20px 0;
+                                    }
+                                    .print-btn {
+                                      background: #2196f3;
+                                      color: white;
+                                      border: none;
+                                      padding: 10px 20px;
+                                      border-radius: 4px;
+                                      cursor: pointer;
+                                      font-size: 14px;
+                                    }
+                                    .print-btn:hover {
+                                      background: #1976d2;
+                                    }
+                                  </style>
+                                  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+                                </head>
+                                <body>
+                                  <div class="barcode-container">
+                                    <div class="inventory-number">Инв. №: ${row.item.inventoryNumber}</div>
+                                    <div class="barcode">
+                                      <svg id="barcode"></svg>
+                                    </div>
+                                    <button class="print-btn" onclick="window.print()">Печать</button>
+                                  </div>
+                                  <script>
+                                    JsBarcode("#barcode", "${row.item.inventoryNumber}", {
+                                      format: "CODE128",
+                                      width: 2,
+                                      height: 100,
+                                      displayValue: true,
+                                      fontSize: 16,
+                                      margin: 10
+                                    });
+                                  </script>
+                                </body>
+                              </html>
+                            `);
+                            newWindow.document.close();
+                          }
+                        } else {
+                          alert('Нет инвентарного номера для генерации штрих-кода');
+                        }
+                      }}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: 'rgba(33, 150, 243, 0.08)'
+                        }
+                      }}
+                  >
+                    <QrCodeIcon />
+                  </IconButton>
+                  </Tooltip>
+                
+                    <Tooltip title="Удалить позицию">
+                <IconButton 
+                        size="small"
+                  color="error"
+                        onClick={() => removeRow(row.key)}
+                        sx={{ 
+                          '&:hover': {
+                            backgroundColor: 'rgba(244, 67, 54, 0.08)'
+                          }
+                        }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+                    </Tooltip>
+                  </Box>
+              </Box>
+              </CardContent>
+            </Card>
+          ))
+        )}
+        </Box>
+
+      {/* Диалог импорта */}
+      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Импорт из Excel</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 1 }}>
-            <FormControl sx={{ minWidth: 220 }}>
-              <InputLabel>Поле</InputLabel>
-              <Select label="Поле" value={massField} onChange={(e) => setMassField(e.target.value)}>
-                <MenuItem value="comment">Комментарий</MenuItem>
-                <MenuItem value="location">Местоположение</MenuItem>
-                <MenuItem value="department">Департамент</MenuItem>
-                <MenuItem value="status">Статус</MenuItem>
-                <MenuItem value="shelf">Стеллаж</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 220 }}>
-              <InputLabel>Операция</InputLabel>
-              <Select label="Операция" value={massOp} onChange={(e) => setMassOp(e.target.value as any)}>
-                <MenuItem value="replace">Заменить (текст)</MenuItem>
-                <MenuItem value="append">Добавить (текст)</MenuItem>
-                <MenuItem value="clear">Очистить (текст)</MenuItem>
-                <MenuItem value="set">Выбрать (список)</MenuItem>
-                <MenuItem value="unset">Очистить (список)</MenuItem>
-              </Select>
-            </FormControl>
-            {(massOp === 'replace' || massOp === 'append') && (
-              <TextField fullWidth label="Значение" value={massValue} onChange={(e) => setMassValue(e.target.value)} />
-            )}
-            {(massOp === 'set') && (
-              <TextField fullWidth label="Значение (строгое поле)" value={massValue} onChange={(e) => setMassValue(e.target.value)} />
-            )}
-          </Box>
-          <Typography variant="body2" sx={{ mt: 2 }}>
-            Будут изменены только строки со статусом «Найден».
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Выберите Excel файл для импорта инвентарных номеров
           </Typography>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            style={{ marginBottom: 16 }}
+          />
+          {importProgress > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Импорт: {importProgress}%
+              </Typography>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setMassEditOpen(false)}>Отмена</Button>
-          <Button variant="contained" onClick={applyMassEdit}>Применить</Button>
+          <Button onClick={() => setImportDialogOpen(false)}>Отмена</Button>
+          <Button onClick={doImport} variant="contained" disabled={!selectedFile}>
+            Импортировать
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Диалог Импорт/Экспорт */}
-      <Dialog open={importExportOpen} onClose={() => setImportExportOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Импорт / Экспорт</DialogTitle>
+      {/* Диалог выбора при множественных совпадениях */}
+      <Dialog 
+        open={selectionDialog.open} 
+        onClose={handleSelectionDialogClose} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>
+          Выбор оборудования для "{selectionDialog.searchValue}"
+        </DialogTitle>
         <DialogContent>
-          <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Импорт</Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-            <FormControl sx={{ minWidth: 180 }}>
-              <InputLabel>Источник</InputLabel>
-              <Select label="Источник" value={importSource} onChange={(e) => setImportSource(e.target.value as any)}>
-                <MenuItem value="clipboard">Буфер обмена</MenuItem>
-                <MenuItem value="csv">CSV файл</MenuItem>
-                <MenuItem value="txt">Текстовый файл</MenuItem>
-                <MenuItem value="xlsx">XLSX файл</MenuItem>
-              </Select>
-            </FormControl>
-            
-            {/* Улучшенная кнопка выбора файла */}
-            <Box sx={{ position: 'relative' }}>
-              <input
-                type="file"
-                accept={importSource === 'xlsx' ? '.xlsx,.xls' : importSource === 'csv' ? '.csv' : '.txt'}
-                onChange={handleFileUpload}
-                style={{
-                  position: 'absolute',
-                  opacity: 0,
-                  width: '100%',
-                  height: '100%',
-                  cursor: 'pointer'
-                }}
-                id="file-upload-input"
-              />
-              <label htmlFor="file-upload-input">
-                <Button
-                  variant="outlined"
-                  component="span"
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Найдено несколько совпадений. Выберите нужное оборудование:
+          </Typography>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {selectionDialog.options.map((equipmentData, index) => {
+              const equipment = equipmentData.item;
+              const typeMap: Record<string, string> = {
+                'Computer': 'Компьютер',
+                'Monitor': 'Монитор', 
+                'Peripheral': 'Устройство'
+              };
+              const otherserial = (equipment.inventoryNumber || '').replace(/^0+/, '') || (equipment.inventoryNumber || '');
+              
+              return (
+                <Paper 
+                  key={index}
                   sx={{
-                    minWidth: 140,
-                    height: 56,
-                    border: '2px dashed',
-                    borderColor: 'primary.main',
+                    p: 2, 
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    borderColor: 'divider',
                     '&:hover': {
-                      borderColor: 'primary.dark',
-                      backgroundColor: 'primary.light',
-                      color: 'primary.contrastText'
+                      borderColor: 'primary.main',
+                      backgroundColor: 'action.hover'
                     }
                   }}
+                  onClick={() => handleSelectEquipment(equipmentData)}
                 >
-                  {importSource === 'clipboard' ? 'Не требуется' : 'Выберите файл'}
-                </Button>
-              </label>
-            </Box>
-          </Box>
-          
-          {importSource === 'clipboard' && (
-            <TextField sx={{ mt: 2 }} fullWidth multiline minRows={4} label="Вставьте список номеров" value={clipboardText} onChange={(e) => setClipboardText(e.target.value)} />
-          )}
-          
-          {/* Выбор столбца для всех форматов файлов */}
-          {importSource !== 'clipboard' && !!uploadedData.length && (
-            <Box sx={{ mt: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-              <Typography variant="body2">Выберите столбец с инвентарными/серийными номерами:</Typography>
-              <FormControl sx={{ minWidth: 220 }}>
-                <InputLabel>Столбец</InputLabel>
-                <Select label="Столбец" value={selectedColumn} onChange={(e) => setSelectedColumn(e.target.value)}>
-                  {Object.keys(uploadedData[0] || {}).map(c => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-          )}
-
-          <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>Экспорт</Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-            <FormControl sx={{ minWidth: 180 }}>
-              <InputLabel>Формат</InputLabel>
-              <Select label="Формат" value={exportFormat} onChange={(e) => setExportFormat(e.target.value as any)}>
-                <MenuItem value="csv">CSV</MenuItem>
-                <MenuItem value="txt">TXT</MenuItem>
-                <MenuItem value="xlsx">XLSX</MenuItem>
-              </Select>
-            </FormControl>
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              {Object.keys(exportColumns).map(k => (
-                <FormControlLabel key={k} control={<Checkbox checked={!!exportColumns[k]} onChange={(e)=> setExportColumns(prev=>({ ...prev, [k]: e.target.checked }))} />} label={
-                  k==='input'?'Ввод': k==='status'?'Статус': k==='otherserial'?'Инв. номер': k==='serial'?'Серийный': k==='name'?'Название': k==='type'?'Тип': k==='comment'?'Комментарий': k==='location'?'Местоположение':'Департамент'
-                } />
-              ))}
-            </Box>
+                  <Typography variant="body1" sx={{ fontWeight: 500, mb: 1 }}>
+                    {typeMap[equipmentData.type] || 'Устройство'}: {equipment.name || 'Без имени'} (Инв. № {otherserial})
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Департамент: {equipment.department || 'Не указано'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Серийный: {equipment.serialNumber || 'Не указано'} | Статус: {equipment.status || 'Не указано'}
+                  </Typography>
+                </Paper>
+              );
+            })}
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={doImport}>Импортировать</Button>
-          <Button variant="contained" onClick={doExport}>Экспортировать</Button>
+          <Button onClick={handleSelectionDialogClose}>
+            Отмена
+          </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Диалог массовых операций */}
+      <BulkOperations
+        open={bulkOperationsOpen}
+        onClose={() => setBulkOperationsOpen(false)}
+        selectedItems={getFoundEquipment()}
+        onBulkOperation={handleBulkOperation}
+        availableStatuses={getAvailableOptions().statuses}
+        availableLocations={getAvailableOptions().locations}
+        availableTypes={getAvailableOptions().types}
+        availableUsers={getAvailableOptions().users}
+      />
     </Box>
   );
 };

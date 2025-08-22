@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { createTheme, ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 
 export interface ThemeSettings {
@@ -79,11 +79,51 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       },
     },
     typography: {
-      fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
       fontSize: themeSettings.fontSize === 'small' ? 14 : themeSettings.fontSize === 'large' ? 18 : 16,
-      h4: { fontWeight: 600 },
-      h5: { fontWeight: 600 },
-      h6: { fontWeight: 600 },
+      h1: { 
+        fontWeight: 700, 
+        letterSpacing: '-0.02em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      h2: { 
+        fontWeight: 700, 
+        letterSpacing: '-0.02em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      h3: { 
+        fontWeight: 600, 
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      h4: { 
+        fontWeight: 600, 
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      h5: { 
+        fontWeight: 600, 
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      h6: { 
+        fontWeight: 600, 
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      body1: {
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      body2: {
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
+      button: {
+        fontWeight: 500,
+        letterSpacing: '-0.01em',
+        fontFeatureSettings: '"cv02", "cv03", "cv04", "cv11"'
+      },
     },
     shape: {
       borderRadius: themeSettings.borderRadius,

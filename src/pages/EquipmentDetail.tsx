@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -12,21 +12,19 @@ import {
   ListItemIcon,
   Avatar,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
   History as HistoryIcon,
+  Print as PrintIcon,
+  Save as SaveIcon,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import AutocompleteSelect from '../components/AutocompleteSelect';
 import { getEntities } from '../storage/entitiesStorage';
 import { getStatuses } from '../storage/statusStorage';
+import { getEquipmentById, updateEquipment } from '../storage/equipmentStorage';
+import JsBarcode from 'jsbarcode';
 
 interface Equipment {
   id: string;
@@ -141,10 +139,26 @@ const mockHistory: HistoryItem[] = [
 const EquipmentDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  
   const [equipment, setEquipment] = useState<Equipment>(mockEquipment);
   const [history] = useState<HistoryItem[]>(mockHistory);
-  const [editMode, setEditMode] = useState(true); // Автоматически входим в режим редактирования
-  const [editData, setEditData] = useState<Equipment>(equipment);
+
+  const [editData, setEditData] = useState<Equipment>({ ...mockEquipment });
+  const barcodeRef = useRef<SVGSVGElement>(null);
+
+
+  // Вычисляем hasChanges через useMemo
+  const hasChanges = useMemo(() => {
+    if (!equipment || !editData) return false;
+    
+    const equipmentJson = JSON.stringify(equipment);
+    const editDataJson = JSON.stringify(editData);
+    const changed = equipmentJson !== editDataJson;
+    
+    return changed;
+  }, [equipment, editData]);
+
+
 
   // Получаем данные из хранилища
   const entities = useMemo(() => getEntities(), []);
@@ -160,32 +174,303 @@ const EquipmentDetail = () => {
   const rackOptions = useMemo(() => entities.shelves.map(s => s.name), [entities.shelves]);
 
   useEffect(() => {
-    // Здесь будет загрузка данных по ID
-    // Загрузка оборудования с ID: ${id}
+    if (id) {
+      const loadedEquipment = getEquipmentById(id);
+      if (loadedEquipment) {
+        setEquipment(loadedEquipment);
+        setEditData({ ...loadedEquipment }); // Создаем копию объекта
+      } else {
+        setEquipment(mockEquipment);
+        setEditData({ ...mockEquipment });
+      }
+    } else {
+      setEquipment(mockEquipment);
+      setEditData({ ...mockEquipment });
+    }
   }, [id]);
 
-  const handleEdit = () => {
-    setEditData({ ...equipment });
-    setEditMode(true);
-  };
 
-  const handleSave = () => {
-    setEquipment(editData);
-    setEditMode(false);
-    // Здесь будет логика сохранения
-    // Сохранение изменений
-  };
 
-  const handleCancel = () => {
-    setEditData(equipment);
-    setEditMode(false);
-  };
 
-  const handleInputChange = (field: keyof Equipment, value: any) => {
+
+  const handleInputChange = useCallback((field: keyof Equipment, value: any) => {
     setEditData(prev => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
-  const isRackFieldEnabled = editMode && (editData.location?.toLowerCase().includes('склад') || equipment.location?.toLowerCase().includes('склад'));
+  const handleSave = useCallback(() => {
+    if (!id) {
+      return;
+    }
+    
+    // Сохраняем изменения в базу данных
+    const updatedEquipment = updateEquipment(id, editData);
+    
+    if (updatedEquipment) {
+      // Обновляем локальное состояние
+      setEquipment(updatedEquipment);
+      setEditData({ ...updatedEquipment });
+      
+      // Показываем уведомление о сохранении
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'success',
+          title: 'Сохранено',
+          message: 'Изменения в карточке оборудования успешно сохранены',
+        });
+      }
+    } else {
+      // Показываем уведомление об ошибке
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'error',
+          title: 'Ошибка',
+          message: 'Не удалось сохранить изменения в карточке оборудования',
+        });
+      }
+    }
+  }, [editData, id]);
+
+  const isRackFieldEnabled = (editData.location?.toLowerCase().includes('склад') || equipment.location?.toLowerCase().includes('склад'));
+
+  // Генерация штрих-кода
+  useEffect(() => {
+    if (barcodeRef.current && equipment.inventoryNumber) {
+      try {
+        JsBarcode(barcodeRef.current, equipment.inventoryNumber, {
+          format: 'CODE128',
+          width: 2,
+          height: 60,
+          displayValue: true,
+          fontSize: 14,
+          margin: 10,
+        });
+      } catch (error) {
+        console.error('Ошибка генерации штрих-кода:', error);
+      }
+    }
+  }, [equipment.inventoryNumber]);
+
+  // Функция печати карточки
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Карточка оборудования</title>
+          <style>
+            body { 
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+              margin: 20px; 
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            .header { 
+              text-align: center; 
+              margin-bottom: 20px; 
+              border-bottom: 2px solid #333; 
+              padding-bottom: 10px; 
+            }
+            .equipment-info { 
+              display: grid; 
+              grid-template-columns: 1fr 1fr; 
+              gap: 15px; 
+              margin-bottom: 20px; 
+            }
+            .info-group { 
+              border: 1px solid #ccc; 
+              padding: 10px; 
+              border-radius: 5px; 
+            }
+            .info-group h3 { 
+              margin: 0 0 10px 0; 
+              color: #333; 
+              font-size: 14px; 
+            }
+            .info-row { 
+              display: flex; 
+              justify-content: space-between; 
+              margin-bottom: 5px; 
+            }
+            .label { 
+              font-weight: bold; 
+              color: #666; 
+            }
+            .value { 
+              color: #333; 
+            }
+            .barcode { 
+              text-align: center; 
+              margin: 20px 0; 
+            }
+            .barcode svg { 
+              max-width: 100%; 
+              height: auto; 
+            }
+            @media print {
+              body { margin: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 style="margin: 0; color: #333;">${equipment.name}</h1>
+            <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">${equipment.type} • ${equipment.manufacturer} ${equipment.model}</p>
+          </div>
+          
+          <div class="equipment-info">
+            <div class="info-group">
+              <h3>Основная информация</h3>
+              <div class="info-row">
+                <span class="label">Наименование:</span>
+                <span class="value">${equipment.name}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Тип:</span>
+                <span class="value">${equipment.type}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Департамент:</span>
+                <span class="value">${equipment.department}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Статус:</span>
+                <span class="value">${equipment.status}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Пользователь:</span>
+                <span class="value">${equipment.user}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Местоположение:</span>
+                <span class="value">${equipment.location}</span>
+              </div>
+            </div>
+            
+            <div class="info-group">
+              <h3>Технические характеристики</h3>
+              <div class="info-row">
+                <span class="label">Производитель:</span>
+                <span class="value">${equipment.manufacturer}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Модель:</span>
+                <span class="value">${equipment.model}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Серийный номер:</span>
+                <span class="value">${equipment.serialNumber}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">IP адрес:</span>
+                <span class="value">${equipment.ipAddress || 'Не указан'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">MAC адрес:</span>
+                <span class="value">${equipment.macAddress || 'Не указан'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">ОС:</span>
+                <span class="value">${equipment.os || 'Не указана'}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="equipment-info">
+            <div class="info-group">
+              <h3>Финансовая информация</h3>
+              <div class="info-row">
+                <span class="label">Дата приобретения:</span>
+                <span class="value">${equipment.purchaseDate}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Стоимость:</span>
+                <span class="value">${equipment.cost} ₽</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Бюджет:</span>
+                <span class="value">${equipment.budget || 'Не указан'} ₽</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Гарантия:</span>
+                <span class="value">${equipment.warrantyMonths} мес.</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Поставщик:</span>
+                <span class="value">${equipment.supplier}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Проект:</span>
+                <span class="value">${equipment.project}</span>
+              </div>
+            </div>
+            
+            <div class="info-group">
+              <h3>Дополнительно</h3>
+              <div class="info-row">
+                <span class="label">Комментарий:</span>
+                <span class="value">${equipment.comment || 'Не указан'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Стеллаж:</span>
+                <span class="value">${equipment.rack || 'Не указан'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Последнее обслуживание:</span>
+                <span class="value">${equipment.lastMaintenance || 'Не указано'}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Следующее обслуживание:</span>
+                <span class="value">${equipment.nextMaintenance || 'Не указано'}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="barcode">
+            <h3>Штрих-код</h3>
+            <div id="barcode-container"></div>
+            <p><strong>Инвентарный номер: ${equipment.inventoryNumber}</strong></p>
+          </div>
+          
+          <div style="text-align: center; margin-top: 30px; color: #666; font-size: 10px;">
+            <p>Дата печати: ${new Date().toLocaleDateString('ru-RU')}</p>
+            <p>Время печати: ${new Date().toLocaleTimeString('ru-RU')}</p>
+          </div>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      // Генерируем штрих-код в окне печати
+      setTimeout(() => {
+        const barcodeContainer = printWindow.document.getElementById('barcode-container');
+        if (barcodeContainer && equipment.inventoryNumber) {
+          try {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            JsBarcode(svg, equipment.inventoryNumber, {
+              format: 'CODE128',
+              width: 2,
+              height: 60,
+              displayValue: true,
+              fontSize: 14,
+              margin: 10,
+            });
+            barcodeContainer.appendChild(svg);
+          } catch (error) {
+            console.error('Ошибка генерации штрих-кода для печати:', error);
+          }
+        }
+        
+        setTimeout(() => {
+          printWindow.print();
+          printWindow.close();
+        }, 1000);
+      }, 500);
+    }
+  };
 
   return (
     <Box>
@@ -205,22 +490,34 @@ const EquipmentDetail = () => {
           <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 500, mt: 1 }}>
             Редактирование
           </Typography>
+
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
-            variant="outlined"
-            startIcon={<EditIcon />}
-            onClick={handleEdit}
-            disabled={editMode}
+            variant="contained"
+            startIcon={<SaveIcon />}
+            onClick={handleSave}
+            disabled={!hasChanges}
+            sx={{ 
+              backgroundColor: hasChanges ? 'success.main' : 'grey.400',
+              color: 'white',
+              '&:hover': {
+                backgroundColor: hasChanges ? 'success.dark' : 'grey.500',
+              }
+            }}
           >
-            Редактировать
+            Сохранить {hasChanges ? '(Есть изменения)' : '(Нет изменений)'}
           </Button>
+          
+
+          
           <Button
             variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+            sx={{ backgroundColor: 'primary.light', color: 'primary.contrastText' }}
           >
-            Удалить
+            Печать
           </Button>
         </Box>
       </Box>
@@ -247,24 +544,22 @@ const EquipmentDetail = () => {
           <TextField
             fullWidth
             label="Наименование"
-            value={editMode ? editData.name : equipment.name}
+            value={editData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
-            disabled={!editMode}
             required
             sx={{ 
               '& .MuiInputBase-input': {
-                color: editMode ? 'text.primary' : 'text.primary',
-                fontWeight: editMode ? 'normal' : '500'
+                color: 'text.primary',
+                fontWeight: 'normal'
               }
             }}
           />
           
           <AutocompleteSelect
-            value={editMode ? editData.type : equipment.type}
+            value={editData.type}
             onChange={(value) => handleInputChange('type', value)}
             options={typeOptions}
             label="Тип техники"
-            disabled={!editMode}
             required
           />
         </Box>
@@ -272,20 +567,18 @@ const EquipmentDetail = () => {
         {/* Второй ряд - департамент и статус */}
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, mb: 3 }}>
           <AutocompleteSelect
-            value={editMode ? editData.department : equipment.department}
+            value={editData.department}
             onChange={(value) => handleInputChange('department', value)}
             options={departmentOptions}
             label="Департамент"
-            disabled={!editMode}
             required
           />
           
           <AutocompleteSelect
-            value={editMode ? editData.status : equipment.status}
+            value={editData.status}
             onChange={(value) => handleInputChange('status', value)}
             options={statusOptions}
             label="Статус"
-            disabled={!editMode}
             required
           />
         </Box>
@@ -295,17 +588,15 @@ const EquipmentDetail = () => {
           <TextField
             fullWidth
             label="Пользователь"
-            value={editMode ? editData.user : equipment.user}
+            value={editData.user}
             onChange={(e) => handleInputChange('user', e.target.value)}
-            disabled={!editMode}
           />
           
           <AutocompleteSelect
-            value={editMode ? editData.location : equipment.location}
+            value={editData.location}
             onChange={(value) => handleInputChange('location', value)}
             options={locationOptions}
             label="Местоположение"
-            disabled={!editMode}
             required
           />
         </Box>
@@ -313,20 +604,19 @@ const EquipmentDetail = () => {
         {/* Четвертый ряд - стеллаж и производитель */}
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, mb: 3 }}>
           <AutocompleteSelect
-            value={editMode ? (editData.rack || '') : (equipment.rack || '')}
+            value={editData.rack || ''}
             onChange={(value) => handleInputChange('rack', value)}
             options={rackOptions}
             label="Стеллаж"
             disabled={!isRackFieldEnabled}
-            helperText={!isRackFieldEnabled && editMode ? 'Доступно только для местоположения со словом «Склад»' : ''}
+            helperText={!isRackFieldEnabled ? 'Доступно только для местоположения со словом «Склад»' : ''}
           />
           
           <TextField
             fullWidth
             label="Производитель"
-            value={editMode ? editData.manufacturer : equipment.manufacturer}
+            value={editData.manufacturer}
             onChange={(e) => handleInputChange('manufacturer', e.target.value)}
-            disabled={!editMode}
             required
           />
         </Box>
@@ -336,18 +626,16 @@ const EquipmentDetail = () => {
           <TextField
             fullWidth
             label="Модель"
-            value={editMode ? editData.model : equipment.model}
+            value={editData.model}
             onChange={(e) => handleInputChange('model', e.target.value)}
-            disabled={!editMode}
             required
           />
           
           <TextField
             fullWidth
             label="Инвентарный номер"
-            value={editMode ? editData.inventoryNumber : equipment.inventoryNumber}
+            value={editData.inventoryNumber}
             onChange={(e) => handleInputChange('inventoryNumber', e.target.value)}
-            disabled={!editMode}
             required
           />
         </Box>
@@ -357,21 +645,49 @@ const EquipmentDetail = () => {
           <TextField
             fullWidth
             label="Серийный номер"
-            value={editMode ? editData.serialNumber : equipment.serialNumber}
+            value={editData.serialNumber}
             onChange={(e) => handleInputChange('serialNumber', e.target.value)}
-            disabled={!editMode}
             required
           />
           
           <TextField
             fullWidth
             label="Комментарий"
-            value={editMode ? editData.comment : equipment.comment}
+            value={editData.comment}
             onChange={(e) => handleInputChange('comment', e.target.value)}
-            disabled={!editMode}
             multiline
             rows={3}
           />
+        </Box>
+
+        {/* Седьмой ряд - штрих-код */}
+        <Box sx={{ mt: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, backgroundColor: 'background.paper' }}>
+          <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
+            Штрих-код для печати
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ 
+              border: '1px solid', 
+              borderColor: 'divider', 
+              borderRadius: 1, 
+              p: 2, 
+              backgroundColor: 'white',
+              minHeight: 80,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <svg ref={barcodeRef} />
+            </Box>
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Инвентарный номер: <strong className="monospace-text">{equipment.inventoryNumber}</strong>
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Используйте кнопку "Печать" для создания печатной версии карточки
+              </Typography>
+            </Box>
+          </Box>
         </Box>
         </Box>
       </Paper>
@@ -387,37 +703,33 @@ const EquipmentDetail = () => {
               fullWidth
               label="Дата приобретения"
               type="date"
-              value={editMode ? editData.purchaseDate : equipment.purchaseDate}
+              value={editData.purchaseDate}
               onChange={(e) => handleInputChange('purchaseDate', e.target.value)}
-              disabled={!editMode}
               InputLabelProps={{ shrink: true }}
             />
           </Box>
           <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
             <AutocompleteSelect
-              value={editMode ? editData.supplier : equipment.supplier}
+              value={editData.supplier}
               onChange={(value) => handleInputChange('supplier', value)}
               options={supplierOptions}
               label="Поставщик"
-              disabled={!editMode}
             />
           </Box>
           <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
             <TextField
               fullWidth
               label="Номер счета"
-              value={editMode ? editData.invoiceNumber : equipment.invoiceNumber}
+              value={editData.invoiceNumber}
               onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
-              disabled={!editMode}
             />
           </Box>
           <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
             <TextField
               fullWidth
               label="Номер договора"
-              value={editMode ? editData.contractNumber : equipment.contractNumber}
+              value={editData.contractNumber}
               onChange={(e) => handleInputChange('contractNumber', e.target.value)}
-              disabled={!editMode}
             />
           </Box>
           <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
@@ -425,9 +737,8 @@ const EquipmentDetail = () => {
               fullWidth
               label="Стоимость"
               type="number"
-              value={editMode ? editData.cost : equipment.cost}
+              value={editData.cost}
               onChange={(e) => handleInputChange('cost', Number(e.target.value))}
-              disabled={!editMode}
               InputProps={{
                 endAdornment: <Typography variant="body2">₽</Typography>,
               }}
@@ -438,9 +749,8 @@ const EquipmentDetail = () => {
               fullWidth
               label="Бюджет"
               type="number"
-              value={editMode ? (editData.budget || '') : (equipment.budget || '')}
+              value={editData.budget || ''}
               onChange={(e) => handleInputChange('budget', Number(e.target.value))}
-              disabled={!editMode}
               InputProps={{
                 endAdornment: <Typography variant="body2">₽</Typography>,
               }}
@@ -448,11 +758,10 @@ const EquipmentDetail = () => {
           </Box>
           <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
             <AutocompleteSelect
-              value={editMode ? editData.project : equipment.project}
+              value={editData.project}
               onChange={(value) => handleInputChange('project', value)}
               options={projectOptions}
               label="Проект"
-              disabled={!editMode}
             />
           </Box>
           <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
@@ -460,9 +769,8 @@ const EquipmentDetail = () => {
               fullWidth
               label="Гарантия (месяцев)"
               type="number"
-              value={editMode ? editData.warrantyMonths : equipment.warrantyMonths}
+              value={editData.warrantyMonths}
               onChange={(e) => handleInputChange('warrantyMonths', Number(e.target.value))}
-              disabled={!editMode}
             />
           </Box>
         </Box>
@@ -516,17 +824,7 @@ const EquipmentDetail = () => {
         </List>
       </Paper>
 
-      {/* Кнопки редактирования */}
-      {editMode && (
-        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
-          <Button variant="outlined" onClick={handleCancel}>
-            Отмена
-          </Button>
-          <Button variant="contained" onClick={handleSave}>
-            Сохранить изменения
-          </Button>
-        </Box>
-      )}
+
     </Box>
   );
 };

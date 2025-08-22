@@ -10,7 +10,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  TextField,
   Typography,
   Chip,
   Alert,
@@ -20,21 +19,20 @@ import {
   ListItemText,
   ListItemIcon,
   Checkbox,
-  Divider,
   IconButton,
+  TextField,
 } from '@mui/material';
 import {
-  SelectAll as SelectAllIcon,
   Clear as ClearIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
   OpenInNew as MoveIcon,
   Assignment as AssignmentIcon,
   Close as CloseIcon,
+  Comment as CommentIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
 
 export interface BulkOperation {
-  type: 'status' | 'location' | 'category' | 'delete' | 'export';
+  type: 'status' | 'location' | 'comment' | 'assign' | 'export';
   value?: string;
   description: string;
 }
@@ -46,7 +44,8 @@ interface BulkOperationsProps {
   onBulkOperation: (operation: BulkOperation) => Promise<void>;
   availableStatuses: string[];
   availableLocations: string[];
-  availableCategories: string[];
+  availableTypes: string[];
+  availableUsers: string[];
 }
 
 const BulkOperations: React.FC<BulkOperationsProps> = ({
@@ -56,7 +55,8 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
   onBulkOperation,
   availableStatuses,
   availableLocations,
-  availableCategories,
+  availableTypes,
+  availableUsers,
 }) => {
   const [operation, setOperation] = useState<BulkOperation | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -80,20 +80,20 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
       valueOptions: availableLocations,
     },
     {
-      type: 'category' as const,
-      label: 'Изменить категорию',
-      icon: <EditIcon />,
-      description: 'Изменить категорию оборудования',
+      type: 'comment' as const,
+      label: 'Добавить в комментарий',
+      icon: <CommentIcon />,
+      description: 'Добавить текст в комментарий к выбранному оборудованию',
       requiresValue: true,
-      valueOptions: availableCategories,
+      valueOptions: [],
     },
     {
-      type: 'delete' as const,
-      label: 'Удалить',
-      icon: <DeleteIcon />,
-      description: 'Удалить выбранное оборудование (необратимо)',
-      requiresValue: false,
-      valueOptions: [],
+      type: 'assign' as const,
+      label: 'Выдать',
+      icon: <PersonIcon />,
+      description: 'Назначить пользователя для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: availableUsers,
     },
     {
       type: 'export' as const,
@@ -149,7 +149,7 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
     return op ? op.label : 'Операция';
   };
 
-  const isDeleteOperation = operation?.type === 'delete';
+
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -243,39 +243,47 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
               {operation.description}
             </Typography>
 
-            {isDeleteOperation && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  Внимание! Эта операция необратима.
-                </Typography>
-                <Typography variant="body2">
-                  Выбранное оборудование будет удалено навсегда. Убедитесь, что это именно то, что нужно.
-                </Typography>
-              </Alert>
-            )}
+
 
             {operations.find(o => o.type === operation.type)?.requiresValue && (
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>
-                  {operation.type === 'status' && 'Новый статус'}
-                  {operation.type === 'location' && 'Новое местоположение'}
-                  {operation.type === 'category' && 'Новая категория'}
-                </InputLabel>
-                <Select
-                  value={operation.value || ''}
-                  onChange={(e) => handleValueChange(e.target.value)}
-                  label={
-                    operation.type === 'status' ? 'Новый статус' :
-                    operation.type === 'location' ? 'Новое местоположение' :
-                    operation.type === 'category' ? 'Новая категория' : 'Значение'
-                  }
-                >
-                  {operations.find(o => o.type === operation.type)?.valueOptions.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </Select>
+                {operation.type === 'comment' ? (
+                  <>
+                    <InputLabel>Текст комментария</InputLabel>
+                    <TextField
+                      multiline
+                      rows={3}
+                      value={operation.value || ''}
+                      onChange={(e) => handleValueChange(e.target.value)}
+                      label="Текст комментария"
+                      placeholder="Введите текст для добавления в комментарий..."
+                      fullWidth
+                    />
+                  </>
+                ) : (
+                  <>
+                    <InputLabel>
+                      {operation.type === 'status' && 'Новый статус'}
+                      {operation.type === 'location' && 'Новое местоположение'}
+                      {operation.type === 'assign' && 'Пользователь'}
+                    </InputLabel>
+                    <Select
+                      value={operation.value || ''}
+                      onChange={(e) => handleValueChange(e.target.value)}
+                      label={
+                        operation.type === 'status' ? 'Новый статус' :
+                        operation.type === 'location' ? 'Новое местоположение' :
+                        operation.type === 'assign' ? 'Пользователь' : 'Значение'
+                      }
+                    >
+                      {operations.find(o => o.type === operation.type)?.valueOptions.map((option) => (
+                        <MenuItem key={option} value={option}>
+                          {option}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </>
+                )}
               </FormControl>
             )}
 
@@ -327,7 +335,7 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
           <Button
             onClick={handleExecute}
             variant="contained"
-            color={isDeleteOperation ? 'error' : 'primary'}
+            color="primary"
             disabled={isProcessing || (operations.find(o => o.type === operation.type)?.requiresValue && !operation.value)}
             startIcon={getOperationIcon(operation.type)}
           >

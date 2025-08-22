@@ -1,8 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import CssBaseline from '@mui/material/CssBaseline';
-import { Box } from '@mui/material';
-import Sidebar from './components/Sidebar';
+import { Box, CssBaseline } from '@mui/material';
 import Dashboard from './pages/Dashboard';
 import EquipmentList from './pages/EquipmentList';
 import EquipmentForm from './pages/EquipmentForm';
@@ -13,6 +11,7 @@ import Printers from './pages/Printers';
 import NotificationSystem, { Notification } from './components/NotificationSystem';
 import { NotificationContext } from './contexts/NotificationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import Sidebar from './components/Sidebar';
 
 function App() {
   const [notifications, setNotifications] = useState<Notification[]>([
@@ -57,6 +56,15 @@ function App() {
   const clearAll = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   }, []);
+
+  // Создаем глобальную систему уведомлений
+  useEffect(() => {
+    window.notificationSystem = {
+      addNotification: (notification: { type: 'success' | 'warning' | 'error' | 'info'; title: string; message: string }) => {
+        addNotification(notification);
+      }
+    };
+  }, [addNotification]);
 
   const notificationContextValue = {
     notifications,

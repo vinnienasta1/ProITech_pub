@@ -6,6 +6,7 @@ export interface Supplier { id: number; name: string; contact: string; phone: st
 export interface Project { id: number; name: string; code: string; status: 'active' | 'completed' | 'on-hold'; }
 export interface Location { id: number; name: string; parent?: string; fullPath: string; description: string; }
 export interface Shelf { id: number; name: string; }
+export interface User { id: number; name: string; email: string; department: string; position: string; }
 
 const defaults = {
   types: [
@@ -45,11 +46,18 @@ const defaults = {
     { id: 2, name: 'Склад A / Ряд 2' },
     { id: 3, name: 'Склад B / Зона 3' },
   ] as Shelf[],
+  users: [
+    { id: 1, name: 'Иванов Иван Иванович', email: 'ivanov@company.ru', department: 'IT отдел', position: 'Системный администратор' },
+    { id: 2, name: 'Петров Петр Петрович', email: 'petrov@company.ru', department: 'IT отдел', position: 'Программист' },
+    { id: 3, name: 'Сидорова Анна Сергеевна', email: 'sidorova@company.ru', department: 'Отдел продаж', position: 'Менеджер' },
+    { id: 4, name: 'Козлов Дмитрий Александрович', email: 'kozlov@company.ru', department: 'Бухгалтерия', position: 'Бухгалтер' },
+    { id: 5, name: 'Смирнова Елена Владимировна', email: 'smirnova@company.ru', department: 'HR отдел', position: 'HR менеджер' },
+  ] as User[],
 };
 
 type EntitiesState = typeof defaults;
 
-const store = createLocalStorage<EntitiesState>('inventory_entities_v1', defaults);
+const store = createLocalStorage<EntitiesState>('inventory_entities_v2', defaults);
 
 export function getEntities(): EntitiesState { return store.get(); }
 export function saveEntities(next: EntitiesState): void { store.set(next); }

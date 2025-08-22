@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
@@ -43,8 +43,8 @@ import {
   Storage as RackIcon,
   Palette as PaletteIcon,
 } from '@mui/icons-material';
-import { getStatuses, saveStatuses, defaultStatuses, StatusItem } from '../storage/statusStorage';
-import { getEntities, saveEntities, EquipmentType, Department, Supplier, Project, Location, Shelf } from '../storage/entitiesStorage';
+import { getStatuses, saveStatuses, StatusItem } from '../storage/statusStorage';
+import { getEntities, saveEntities } from '../storage/entitiesStorage';
 import ColorPicker from '../components/ColorPicker';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -70,34 +70,9 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-interface Status extends StatusItem {}
 
-// Убираем неиспользуемые интерфейсы и переменные
-// interface ThemeSettings {
-//   mode: 'light' | 'dark';
-//   preset: 'standard' | 'dark' | 'professional' | 'bright';
-//   borderRadius: number;
-//   spacing: number;
-//   fontSize: 'small' | 'medium' | 'large';
-// }
 
-// const defaultThemeSettings: ThemeSettings = {
-//   mode: 'light',
-//   preset: 'standard',
-//   borderRadius: 8,
-//   spacing: 8,
-//   fontSize: 'medium',
-// };
 
-// const themePresets = {
-//   standard: {
-//     mode: 'light' as const,
-//     primaryColor: '#1976d2',
-//     secondaryColor: '#dc004e',
-//     backgroundColor: '#ffffff',
-//     textColor: '#000000',
-//   },
-//   dark: {
 //     mode: 'dark' as const,
 //     primaryColor: '#90caf9',
 //     secondaryColor: '#f48fb1',

@@ -44,7 +44,7 @@ interface ExportDataProps {
   onClose: () => void;
   onExport: (options: ExportOptions) => Promise<void>;
   availableFields: string[];
-  categories: string[];
+  types: string[];
   statuses: string[];
   locations: string[];
 }
@@ -54,7 +54,7 @@ const ExportData: React.FC<ExportDataProps> = ({
   onClose,
   onExport,
   availableFields,
-  categories,
+  types,
   statuses,
   locations,
 }) => {
@@ -238,9 +238,9 @@ const ExportData: React.FC<ExportDataProps> = ({
                     label="Категория"
                   >
                     <MenuItem value="">Все категории</MenuItem>
-                    {categories.map((category) => (
-                      <MenuItem key={category} value={category}>
-                        {category}
+                    {types.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        {type}
                       </MenuItem>
                     ))}
                   </Select>

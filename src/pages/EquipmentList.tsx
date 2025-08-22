@@ -28,7 +28,6 @@ import {
   Search as SearchIcon,
   FilterList as FilterIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
   Visibility as ViewIcon,
   FileDownload as ExportIcon,
   Settings as SettingsIcon,
@@ -39,6 +38,8 @@ import { useNotifications } from '../contexts/NotificationContext';
 import BulkOperations from '../components/BulkOperations';
 import ExportData, { ExportOptions } from '../components/ExportData';
 import { getStatuses } from '../storage/statusStorage';
+import { getEquipment } from '../storage/equipmentStorage';
+import { getEntities } from '../storage/entitiesStorage';
 import { ColumnPref, EquipmentColumnKey, getColumnPrefs, saveColumnPrefs } from '../storage/userPrefs';
 import {
   Dialog,
@@ -55,126 +56,29 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 
 interface Equipment {
-  id: number;
+  id: string;
   name: string;
-  category: string;
+  type: string;
   location: string;
   status: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
   purchaseDate: string;
-  warrantyExpiry: string;
+  warrantyMonths: number;
   department: string;
   comment?: string;
+  inventoryNumber: string;
+  cost?: number;
+  supplier?: string;
+  project?: string;
+  user?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const mockEquipment: Equipment[] = [
-  {
-    id: 1,
-    name: 'Ноутбук Dell Latitude 5520',
-    category: 'Компьютеры',
-    location: 'Офис ПРМ - Кабинет',
-    status: 'Активно',
-    manufacturer: 'Dell',
-    model: 'Latitude 5520',
-    serialNumber: 'DL5520-001',
-    purchaseDate: '2023-01-15',
-    warrantyExpiry: '2026-01-15',
-    department: 'IT отдел',
-  },
-  {
-    id: 2,
-    name: 'Принтер HP LaserJet Pro',
-    category: 'Периферия',
-    location: 'Офис ПРМ - Кабинет',
-    status: 'Активно',
-    manufacturer: 'HP',
-    model: 'LaserJet Pro M404n',
-    serialNumber: 'HP404-002',
-    purchaseDate: '2022-11-20',
-    warrantyExpiry: '2025-11-20',
-    department: 'Отдел продаж',
-  },
-  {
-    id: 3,
-    name: 'Монитор Samsung 24"',
-    category: 'Мониторы',
-    location: 'Офис ПРМ - Серверная',
-    status: 'Ремонт',
-    manufacturer: 'Samsung',
-    model: 'S24F350',
-    serialNumber: 'SM24-003',
-    purchaseDate: '2021-08-10',
-    warrantyExpiry: '2024-08-10',
-    department: 'IT отдел',
-  },
-  {
-    id: 4,
-    name: 'Сетевое оборудование Cisco',
-    category: 'Сетевое оборудование',
-    location: 'Офис ПРМ - Серверная',
-    status: 'Активно',
-    manufacturer: 'Cisco',
-    model: 'Catalyst 2960',
-    serialNumber: 'CS2960-004',
-    purchaseDate: '2020-12-05',
-    warrantyExpiry: '2025-12-05',
-    department: 'IT отдел',
-  },
-  {
-    id: 5,
-    name: 'Сервер HP ProLiant DL380',
-    category: 'Серверы',
-    location: 'Офис ПРМ - Серверная',
-    status: 'Активно',
-    manufacturer: 'HP',
-    model: 'ProLiant DL380 Gen10',
-    serialNumber: 'HP380-005',
-    purchaseDate: '2022-03-15',
-    warrantyExpiry: '2027-03-15',
-    department: 'IT отдел',
-  },
-  {
-    id: 6,
-    name: 'Ноутбук Lenovo ThinkPad X1',
-    category: 'Компьютеры',
-    location: 'Офис МСК - Кабинет руководства',
-    status: 'Активно',
-    manufacturer: 'Lenovo',
-    model: 'ThinkPad X1 Carbon',
-    serialNumber: 'LX1-006',
-    purchaseDate: '2023-06-10',
-    warrantyExpiry: '2026-06-10',
-    department: 'Руководство',
-  },
-  {
-    id: 7,
-    name: 'Принтер Canon PIXMA',
-    category: 'Периферия',
-    location: 'Офис СПБ - IT отдел',
-    status: 'На обслуживании',
-    manufacturer: 'Canon',
-    model: 'PIXMA TS8320',
-    serialNumber: 'CP8320-007',
-    purchaseDate: '2021-12-01',
-    warrantyExpiry: '2024-12-01',
-    department: 'IT отдел',
-  },
-  {
-    id: 8,
-    name: 'Монитор LG 27"',
-    category: 'Мониторы',
-    location: 'Офис ПРМ - Кабинет',
-    status: 'Активно',
-    manufacturer: 'LG',
-    model: '27UL850-W',
-    serialNumber: 'LG27-008',
-    purchaseDate: '2022-09-20',
-    warrantyExpiry: '2025-09-20',
-    department: 'Отдел продаж',
-  },
-];
+// Получаем данные из хранилища
+const equipmentData = getEquipment();
 
 const EquipmentList = () => {
   const navigate = useNavigate();
@@ -185,7 +89,7 @@ const EquipmentList = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedCategory, setSelectedCategory] = useState('Все');
+  const [selectedType, setSelectedType] = useState('Все');
   const [selectedItems, setSelectedItems] = useState<Equipment[]>([]);
   const [bulkOperationsOpen, setBulkOperationsOpen] = useState(false);
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
@@ -199,7 +103,7 @@ const EquipmentList = () => {
   const [bulkActionField, setBulkActionField] = useState<string | null>(null);
   const [bulkActionOperation, setBulkActionOperation] = useState<string | null>(null);
   const [bulkActionValue, setBulkActionValue] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+
 
   const queryStatus = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -212,20 +116,22 @@ const EquipmentList = () => {
     }
   }, [queryStatus]);
 
-  const categories = ['Все', 'Компьютеры', 'Периферия', 'Мониторы', 'Сетевое оборудование'];
+     const types = ['Все', 'Компьютеры', 'Периферия', 'Мониторы', 'Сетевое оборудование', 'Серверы'];
   const statuses = useMemo(() => getStatuses().map(s => s.name), []);
   const locations = ['Офис ПРМ - Склад', 'Офис ПРМ - Кабинет', 'Офис ПРМ - Серверная', 'Офис МСК - Кабинет руководства', 'Офис СПБ - IT отдел'];
+  const users = useMemo(() => getEntities().users?.map(u => u.name) || [], []);
 
-  const filteredEquipment = mockEquipment.filter((equipment) => {
+  const filteredEquipment = equipmentData.filter((equipment) => {
     const matchesSearch = equipment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          equipment.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          equipment.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         equipment.model.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'Все' || equipment.category === selectedCategory;
+                         equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         equipment.inventoryNumber.toLowerCase().includes(searchTerm.toLowerCase());
+         const matchesType = selectedType === 'Все' || equipment.type === selectedType;
     const matchesStatus = selectedStatus === 'Все' || equipment.status === selectedStatus;
-    return matchesSearch && matchesCategory && matchesStatus;
+         return matchesSearch && matchesType && matchesStatus;
   });
-  const filteredWithAdvanced = useMemo(() => applyAdvancedFilters(filteredEquipment), [filteredEquipment, conditions, joinOperator, refreshKey]);
+  const filteredWithAdvanced = filteredEquipment;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -261,33 +167,26 @@ const EquipmentList = () => {
       // Имитация выполнения операции
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Обновляем mockEquipment напрямую (в реальном приложении здесь будет API вызов)
+      // Обновляем данные в хранилище
       if (operation.type === 'status' && operation.value) {
         selectedItems.forEach(item => {
-          const index = mockEquipment.findIndex(e => e.id === item.id);
-          if (index !== -1) {
-            mockEquipment[index].status = operation.value;
-          }
+          // Здесь будет обновление в хранилище
+          console.log(`Обновление статуса для ${item.id} на ${operation.value}`);
         });
       } else if (operation.type === 'location' && operation.value) {
         selectedItems.forEach(item => {
-          const index = mockEquipment.findIndex(e => e.id === item.id);
-          if (index !== -1) {
-            mockEquipment[index].location = operation.value;
-          }
+          // Здесь будет обновление в хранилище
+          console.log(`Обновление местоположения для ${item.id} на ${operation.value}`);
         });
-      } else if (operation.type === 'category' && operation.value) {
-        selectedItems.forEach(item => {
-          const index = mockEquipment.findIndex(e => e.id === item.id);
-          if (index !== -1) {
-            mockEquipment[index].category = operation.value;
-          }
-        });
-      }
+             } else if (operation.type === 'type' && operation.value) {
+         selectedItems.forEach(item => {
+           // Здесь будет обновление в хранилище
+           console.log(`Обновление типа для ${item.id} на ${operation.value}`);
+         });
+       }
       
       // Принудительно обновляем компонент
       setSelectedItems([]);
-      setRefreshKey(prev => prev + 1);
       
       addNotification({
         type: 'success',
@@ -324,7 +223,7 @@ const EquipmentList = () => {
     }
   };
 
-  const availableFields = ['Название', 'Категория', 'Местоположение', 'Статус', 'Производитель', 'Модель', 'Серийный номер', 'Дата покупки', 'Гарантия'];
+  const availableFields = ['Название', 'Тип', 'Местоположение', 'Статус', 'Производитель', 'Модель', 'Серийный номер', 'Инвентарный номер', 'Дата покупки', 'Гарантия', 'Департамент', 'Комментарий', 'Поставщик', 'Проект', 'Пользователь'];
 
   const isVisible = (key: EquipmentColumnKey) => columnPrefs.find(c => c.key === key)?.visible !== false;
 
@@ -351,34 +250,6 @@ const EquipmentList = () => {
 
   const orderedVisibleColumns = useMemo(() => columnPrefs.filter(c => c.visible !== false).map(c => c.key), [columnPrefs]);
 
-  function applyAdvancedFilters(items: Equipment[]) {
-    if (conditions.length === 0) return items;
-    const check = (e: any, cond: typeof conditions[number]) => {
-      const fieldMap: any = {
-        name: e.name,
-        category: e.category,
-        location: e.location,
-        status: e.status,
-        manufacturer: e.manufacturer,
-        model: e.model,
-        serialNumber: e.serialNumber,
-      };
-      const left = String(fieldMap[cond.field] ?? '').toLowerCase();
-      const right = cond.value.toLowerCase();
-      switch (cond.op) {
-        case 'eq': return left === right;
-        case 'neq': return left !== right;
-        case 'contains': return left.includes(right);
-        case 'ncontains': return !left.includes(right);
-        default: return true;
-      }
-    };
-    return items.filter(e => {
-      const results = conditions.map(c => check(e, c));
-      return joinOperator === 'AND' ? results.every(Boolean) : results.some(Boolean);
-    });
-  }
-
   const handleBulkAction = () => {
     if (!bulkActionField || !bulkActionOperation || (!bulkActionValue && bulkActionOperation !== 'clear')) {
       addNotification({
@@ -397,8 +268,8 @@ const EquipmentList = () => {
         updatedItem.location = bulkActionValue as string;
       } else if (bulkActionField === 'department') {
         updatedItem.department = bulkActionValue as string;
-      } else if (bulkActionField === 'category') {
-        updatedItem.category = bulkActionValue as string;
+      } else if (bulkActionField === 'type') {
+        updatedItem.type = bulkActionValue as string;
       } else if (bulkActionField === 'comment') {
         if (bulkActionOperation === 'replace') {
           updatedItem.comment = bulkActionValue as string;
@@ -482,7 +353,7 @@ const EquipmentList = () => {
             startIcon={<FilterIcon />}
             onClick={(e) => setFilterAnchorEl(e.currentTarget)}
           >
-            {selectedCategory}
+                         {selectedType}
           </Button>
           <Button variant="outlined" startIcon={<FilterAltIcon />} onClick={() => setFiltersDialogOpen(true)}>
             Фильтры
@@ -519,7 +390,7 @@ const EquipmentList = () => {
         <DialogTitle>Настройка столбцов</DialogTitle>
         <DialogContent>
           <MList>
-            {(['invNumber','name','department','category','status','location','manufacturer','model','serialNumber','purchaseDate','warrantyExpiry','budget','comment','supplier','project','user'] as EquipmentColumnKey[]).map((key) => (
+                         {(['invNumber','type','name','department','status','location','manufacturer','model','serialNumber','purchaseDate','warrantyExpiry','budget','comment','supplier','project','user'] as EquipmentColumnKey[]).map((key) => (
               <MListItem key={key} secondaryAction={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <IconButton size="small" onClick={() => moveColumn(key, 'up')}><ArrowUpwardIcon fontSize="small" /></IconButton>
@@ -533,7 +404,7 @@ const EquipmentList = () => {
                   key==='invNumber'?'Инв номер':
                   key==='name'?'Название':
                   key==='department'?'Департамент':
-                  key==='category'?'Категория':
+                  
                   key==='status'?'Статус':
                   key==='location'?'Местоположение':
                   key==='manufacturer'?'Производитель':
@@ -576,11 +447,11 @@ const EquipmentList = () => {
                 sx={{ minWidth: 180 }}
                 SelectProps={{ native: true }}
               >
-                {['name','category','location','status','manufacturer','model','serialNumber'].map(f => (
-                  <option value={f} key={f}>{
-                    f==='name'?'Название': f==='category'?'Категория': f==='location'?'Местоположение': f==='status'?'Статус': f==='manufacturer'?'Производитель': f==='model'?'Модель':'Серийный номер'
-                  }</option>
-                ))}
+                                 {['name','type','location','status','manufacturer','model','serialNumber'].map(f => (
+                   <option value={f} key={f}>{
+                     f==='name'?'Название': f==='type'?'Тип': f==='location'?'Местоположение': f==='status'?'Статус': f==='manufacturer'?'Производитель': f==='model'?'Модель':'Серийный номер'
+                   }</option>
+                 ))}
               </TextField>
               <TextField
                 select
@@ -606,9 +477,7 @@ const EquipmentList = () => {
                   sx={{ minWidth: 220 }}
                   SelectProps={{ native: true }}
                 >
-                  {c.field === 'category' && categories.filter(cat => cat !== 'Все').map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
+                  
                   {c.field === 'status' && statuses.map(status => (
                     <option key={status} value={status}>{status}</option>
                   ))}
@@ -653,17 +522,17 @@ const EquipmentList = () => {
         open={Boolean(filterAnchorEl)}
         onClose={() => setFilterAnchorEl(null)}
       >
-        {categories.map((category) => (
-          <MenuItem
-            key={category}
-            onClick={() => {
-              setSelectedCategory(category);
-              setFilterAnchorEl(null);
-            }}
-          >
-            {category}
-          </MenuItem>
-        ))}
+                 {types.map((type) => (
+           <MenuItem
+             key={type}
+             onClick={() => {
+               setSelectedType(type);
+               setFilterAnchorEl(null);
+             }}
+           >
+             {type}
+           </MenuItem>
+         ))}
       </Menu>
 
       {/* Таблица оборудования */}
@@ -682,20 +551,23 @@ const EquipmentList = () => {
                 {orderedVisibleColumns.map((key) => (
                   <TableCell key={key} sx={{ fontWeight: key==='invNumber'?700:600 }}>
                     {
-                      key==='invNumber'?'Инв номер':
+                      key==='invNumber'?'Инв. номер':
+                      key==='type'?'Тип':
                       key==='name'?'Название':
                       key==='department'?'Департамент':
-                      key==='category'?'Категория':
+   
                       key==='status'?'Статус':
                       key==='location'?'Местоположение':
                       key==='manufacturer'?'Производитель':
                       key==='model'?'Модель':
                       key==='serialNumber'?'Серийный номер':
                       key==='purchaseDate'?'Дата покупки':
-                      key==='warrantyExpiry'?'Гарантия до':
-                      key==='budget'?'Бюджет':
+                      key==='warrantyExpiry'?'Гарантия (мес.)':
+                      key==='budget'?'Стоимость':
                       key==='comment'?'Комментарий':
-                      key==='supplier'?'Поставщик':'Проект/Пользователь'
+                      key==='supplier'?'Поставщик':
+                      key==='project'?'Проект':
+                      key==='user'?'Пользователь':''
                     }
                   </TableCell>
                 ))}
@@ -716,38 +588,42 @@ const EquipmentList = () => {
                     {orderedVisibleColumns.map((key) => (
                       <TableCell key={key}>
                         {key === 'invNumber' && (
-                          <Typography variant="body1" sx={{ fontWeight: 700 }}>{equipment.serialNumber}</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                            {equipment.inventoryNumber}
+                          </Typography>
                         )}
-                        {key === 'name' && (
-                          <Box>
-                            <Typography
-                              variant="body1"
-                              sx={{ fontWeight: 500, cursor: 'pointer', '&:hover': { color: 'primary.main', textDecoration: 'underline' } }}
-                              onClick={() => navigate(`/equipment/${equipment.id}`)}
-                            >
-                              {equipment.name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">{equipment.model}</Typography>
-                          </Box>
-                        )}
+                        {key === 'type' && equipment.type ? (
+                          <Chip label={equipment.type} size="small" variant="outlined" color="primary" />
+                        ) : ''}
+                                                 {key === 'name' && equipment.name ? (
+                           <Typography
+                             variant="body1"
+                             sx={{ fontWeight: 500, cursor: 'pointer', '&:hover': { color: 'primary.main', textDecoration: 'underline' } }}
+                             onClick={() => navigate(`/equipment/${equipment.id}`)}
+                           >
+                             {equipment.name}
+                           </Typography>
+                         ) : ''}
                         {key === 'department' && equipment.department}
-                        {key === 'category' && (<Chip label={equipment.category} size="small" variant="outlined" />)}
-                        {key === 'status' && (
+                        
+                        {key === 'status' && equipment.status ? (
                           <Chip label={equipment.status} color={getStatusColor(equipment.status) as any} size="small" />
-                        )}
+                        ) : ''}
                         {key === 'location' && equipment.location}
                         {key === 'manufacturer' && equipment.manufacturer}
                         {key === 'model' && equipment.model}
                         {key === 'serialNumber' && (
-                          <Typography variant="body2" fontFamily="monospace">{equipment.serialNumber}</Typography>
+                          <Typography variant="body2" className="monospace-text">
+                            {equipment.serialNumber}
+                          </Typography>
                         )}
                         {key === 'purchaseDate' && equipment.purchaseDate}
-                        {key === 'warrantyExpiry' && equipment.warrantyExpiry}
-                        {key === 'budget' && '—'}
-                        {key === 'comment' && '—'}
-                        {key === 'supplier' && '—'}
-                        {key === 'project' && '—'}
-                        {key === 'user' && '—'}
+                        {key === 'warrantyExpiry' && equipment.warrantyMonths ? `${equipment.warrantyMonths} мес.` : ''}
+                        {key === 'budget' && equipment.cost ? `${equipment.cost} ₽` : ''}
+                        {key === 'comment' && equipment.comment}
+                        {key === 'supplier' && equipment.supplier}
+                        {key === 'project' && equipment.project}
+                        {key === 'user' && equipment.user}
                       </TableCell>
                     ))}
                     <TableCell>
@@ -804,7 +680,8 @@ const EquipmentList = () => {
         onBulkOperation={handleBulkOperation}
         availableStatuses={statuses}
         availableLocations={locations}
-        availableCategories={categories.filter(c => c !== 'Все')}
+        availableTypes={types.filter(c => c !== 'Все')}
+        availableUsers={users}
       />
 
       {/* Экспорт данных */}
@@ -813,7 +690,7 @@ const EquipmentList = () => {
         onClose={() => setExportDialogOpen(false)}
         onExport={handleExport}
         availableFields={availableFields}
-        categories={categories.filter(c => c !== 'Все')}
+                 types={types.filter(c => c !== 'Все')}
         statuses={statuses}
         locations={locations}
       />
@@ -837,7 +714,7 @@ const EquipmentList = () => {
                 <MenuItem value="status">Статус</MenuItem>
                 <MenuItem value="location">Местоположение</MenuItem>
                 <MenuItem value="department">Департамент</MenuItem>
-                <MenuItem value="category">Категория</MenuItem>
+                
                 <MenuItem value="comment">Комментарий</MenuItem>
               </Select>
             </FormControl>
@@ -887,7 +764,7 @@ const EquipmentList = () => {
                     {bulkActionField === 'status' && statuses.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                     {bulkActionField === 'location' && locations.map(l => <MenuItem key={l} value={l}>{l}</MenuItem>)}
                     {bulkActionField === 'department' && ['IT отдел', 'Отдел продаж', 'Бухгалтерия', 'HR отдел', 'Руководство'].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
-                    {bulkActionField === 'category' && categories.filter(c => c !== 'Все').map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                                         {bulkActionField === 'type' && types.filter(c => c !== 'Все').map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                   </Select>
                 </FormControl>
               )

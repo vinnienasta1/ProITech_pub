@@ -13,6 +13,9 @@ import {
 } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { useNotifications } from '../contexts/NotificationContext';
+import { addEquipment, updateEquipment, getEquipmentById } from '../storage/equipmentStorage';
+import { getEntities } from '../storage/entitiesStorage';
 
 interface EquipmentFormData {
   name: string;
@@ -35,17 +38,14 @@ interface EquipmentFormData {
   warrantyMonths: string;
 }
 
-const mockEquipmentTypes = ['Компьютеры', 'Периферия', 'Мониторы', 'Сетевое оборудование', 'Серверы'];
-const mockDepartments = ['IT отдел', 'Отдел продаж', 'Бухгалтерия', 'HR отдел'];
-const mockStatuses = ['Активно', 'Ремонт', 'Списано', 'На обслуживании', 'Резерв'];
-const mockLocations = ['Офис ПРМ - Склад', 'Офис ПРМ - Кабинет', 'Офис ПРМ - Серверная', 'Офис МСК - Кабинет руководства', 'Офис МСК - Конференц-зал', 'Офис СПБ - IT отдел'];
-const mockSuppliers = ['ООО "ТехноСервис"', 'ООО "КомпьютерМир"', 'ООО "Электроника+"'];
-const mockProjects = ['Оцифровка документов', 'Обновление серверов', 'Внедрение CRM', 'Модернизация сети'];
-
 const EquipmentForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { addNotification } = useNotifications();
   const isEditing = Boolean(id);
+
+  // Получаем данные из хранилища
+  const entities = getEntities();
 
   const [formData, setFormData] = useState<EquipmentFormData>({
     name: '',
@@ -71,9 +71,30 @@ const EquipmentForm = () => {
   const [errors, setErrors] = useState<Partial<EquipmentFormData>>({});
 
   useEffect(() => {
-    if (isEditing) {
-      // Здесь будет загрузка данных для редактирования
-      // Загрузка данных для редактирования
+    if (isEditing && id) {
+      const equipment = getEquipmentById(id);
+      if (equipment) {
+        setFormData({
+          name: equipment.name,
+          type: equipment.type,
+          department: equipment.department,
+          status: equipment.status,
+          user: equipment.user,
+          location: equipment.location,
+          manufacturer: equipment.manufacturer,
+          model: equipment.model,
+          inventoryNumber: equipment.inventoryNumber,
+          serialNumber: equipment.serialNumber,
+          comment: equipment.comment,
+          purchaseDate: equipment.purchaseDate,
+          supplier: equipment.supplier,
+          invoiceNumber: equipment.invoiceNumber,
+          contractNumber: equipment.contractNumber,
+          cost: equipment.cost.toString(),
+          project: equipment.project,
+          warrantyMonths: equipment.warrantyMonths.toString(),
+        });
+      }
     }
   }, [id, isEditing]);
 
@@ -108,10 +129,62 @@ const EquipmentForm = () => {
       return;
     }
 
-    // Отправка формы
-    // Здесь будет логика сохранения
-    
-    navigate('/equipment');
+    try {
+      const equipmentData = {
+        name: formData.name.trim(),
+        type: formData.type,
+        department: formData.department,
+        status: formData.status,
+        user: formData.user.trim(),
+        location: formData.location.trim(),
+        manufacturer: formData.manufacturer.trim(),
+        model: formData.model.trim(),
+        inventoryNumber: formData.inventoryNumber.trim(),
+        serialNumber: formData.serialNumber.trim(),
+        comment: formData.comment.trim(),
+        purchaseDate: formData.purchaseDate,
+        supplier: formData.supplier.trim(),
+        invoiceNumber: formData.invoiceNumber.trim(),
+        contractNumber: formData.contractNumber.trim(),
+        cost: parseFloat(formData.cost) || 0,
+        project: formData.project.trim(),
+        warrantyMonths: parseInt(formData.warrantyMonths) || 0,
+      };
+
+      if (isEditing && id) {
+        const updated = updateEquipment(id, equipmentData);
+        if (updated) {
+          addNotification({
+            type: 'success',
+            title: 'Успешно!',
+            message: 'Оборудование обновлено',
+          });
+        } else {
+          addNotification({
+            type: 'error',
+            title: 'Ошибка!',
+            message: 'Не удалось обновить оборудование',
+          });
+          return;
+        }
+      } else {
+        const newEquipment = addEquipment(equipmentData);
+        addNotification({
+          type: 'success',
+          title: 'Успешно!',
+          message: `Оборудование "${newEquipment.name}" добавлено в базу`,
+        });
+      }
+
+      navigate('/equipment');
+    } catch (error) {
+      console.error('Ошибка сохранения:', error);
+      addNotification({
+        type: 'error',
+        title: 'Ошибка!',
+        message: 'Произошла ошибка при сохранении',
+      });
+    }
   };
 
   return (
@@ -160,8 +233,8 @@ const EquipmentForm = () => {
                     onChange={(e) => handleInputChange('type', e.target.value)}
                     label="Тип техники"
                   >
-                    {mockEquipmentTypes.map((type) => (
-                      <MenuItem key={type} value={type}>{type}</MenuItem>
+                    {entities.types.map((type) => (
+                      <MenuItem key={type.id} value={type.name}>{type.name}</MenuItem>
                     ))}
                   </Select>
                   {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
@@ -178,8 +251,8 @@ const EquipmentForm = () => {
                     onChange={(e) => handleInputChange('department', e.target.value)}
                     label="Департамент"
                   >
-                    {mockDepartments.map((dept) => (
-                      <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+                    {entities.departments.map((dept) => (
+                      <MenuItem key={dept.id} value={dept.name}>{dept.name}</MenuItem>
                     ))}
                   </Select>
                   {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
@@ -194,7 +267,7 @@ const EquipmentForm = () => {
                     onChange={(e) => handleInputChange('status', e.target.value)}
                     label="Статус"
                   >
-                    {mockStatuses.map((status) => (
+                    {['Активно', 'Ремонт', 'Списано', 'На обслуживании', 'Резерв'].map((status) => (
                       <MenuItem key={status} value={status}>{status}</MenuItem>
                     ))}
                   </Select>
@@ -222,8 +295,8 @@ const EquipmentForm = () => {
                     onChange={(e) => handleInputChange('location', e.target.value)}
                     label="Местоположение"
                   >
-                    {mockLocations.map((location) => (
-                      <MenuItem key={location} value={location}>{location}</MenuItem>
+                    {entities.locations.map((location) => (
+                      <MenuItem key={location.id} value={location.fullPath}>{location.fullPath}</MenuItem>
                     ))}
                   </Select>
                   {errors.location && <FormHelperText>{errors.location}</FormHelperText>}
@@ -323,8 +396,8 @@ const EquipmentForm = () => {
                     onChange={(e) => handleInputChange('supplier', e.target.value)}
                     label="Поставщик"
                   >
-                    {mockSuppliers.map((supplier) => (
-                      <MenuItem key={supplier} value={supplier}>{supplier}</MenuItem>
+                    {entities.suppliers.map((supplier) => (
+                      <MenuItem key={supplier.id} value={supplier.name}>{supplier.name}</MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -373,8 +446,8 @@ const EquipmentForm = () => {
                     onChange={(e) => handleInputChange('project', e.target.value)}
                     label="Проект"
                   >
-                    {mockProjects.map((project) => (
-                      <MenuItem key={project} value={project}>{project}</MenuItem>
+                    {entities.projects.map((project) => (
+                      <MenuItem key={project.id} value={project.name}>{project.name}</MenuItem>
                     ))}
                   </Select>
                 </FormControl>

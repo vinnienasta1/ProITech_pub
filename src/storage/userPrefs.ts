@@ -1,8 +1,8 @@
 export type EquipmentColumnKey =
   | 'invNumber'
+  | 'type'
   | 'name'
   | 'department'
-  | 'category'
   | 'status'
   | 'location'
   | 'manufacturer'
@@ -24,12 +24,13 @@ export interface ColumnPref {
 const STORAGE_KEY = 'equipment_columns_v1';
 
 export function getDefaultColumnPrefs(): ColumnPref[] {
-  // По умолчанию показываем ключевые 6 колонок, остальные доступны в настройках
+  // По умолчанию показываем ключевые 7 колонок, остальные доступны в настройках
   const defaults: ColumnPref[] = [
     { key: 'invNumber', visible: true },
+    { key: 'type', visible: true },
     { key: 'name', visible: true },
     { key: 'department', visible: true },
-    { key: 'category', visible: true },
+
     { key: 'status', visible: true },
     { key: 'location', visible: true },
     { key: 'manufacturer', visible: false },
