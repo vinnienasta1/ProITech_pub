@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -9,45 +10,23 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  FormHelperText,
+  Chip,
+  Alert,
 } from '@mui/material';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
-import { useNotifications } from '../contexts/NotificationContext';
-import { addEquipment, updateEquipmentByInventoryNumber, getEquipment } from '../storage/equipmentStorage';
+import { Save as SaveIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
+import { Equipment } from '../types/equipment';
+import { getEquipment, addEquipment, updateEquipmentByInventoryNumber } from '../storage/equipmentStorage';
 import { getEntities } from '../storage/entitiesStorage';
+import { getStatuses } from '../storage/statusStorage';
+import { useActionLog } from '../contexts/ActionLogContext';
 
-interface EquipmentFormData {
-  name: string;
-  type: string;
-  department: string;
-  status: string;
-  user: string;
-  location: string;
-  manufacturer: string;
-  model: string;
-  inventoryNumber: string;
-  serialNumber: string;
-  comment: string;
-  purchaseDate: string;
-  supplier: string;
-  invoiceNumber: string;
-  contractNumber: string;
-  cost: string;
-  project: string;
-  warrantyMonths: string;
-}
-
-const EquipmentForm = () => {
+const EquipmentForm: React.FC = () => {
+  const { inventoryNumber } = useParams<{ inventoryNumber: string }>();
   const navigate = useNavigate();
-  const { inventoryNumber } = useParams();
-  const { addNotification } = useNotifications();
+  const { addAction } = useActionLog();
+  
   const isEditing = Boolean(inventoryNumber);
-
-  // Получаем данные из хранилища
-  const entities = getEntities();
-
-  const [formData, setFormData] = useState<EquipmentFormData>({
+  const [equipmentData, setEquipmentData] = useState<Partial<Equipment>>({
     name: '',
     type: '',
     department: '',
@@ -60,70 +39,56 @@ const EquipmentForm = () => {
     serialNumber: '',
     comment: '',
     purchaseDate: '',
+    warrantyDate: '',
     supplier: '',
     invoiceNumber: '',
     contractNumber: '',
-    cost: '',
+    cost: 0,
     project: '',
-    warrantyMonths: '',
+    warrantyMonths: 0,
+    rack: '',
+    budget: 0,
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitSuccess] = useState(false);
 
-  const [errors, setErrors] = useState<Partial<EquipmentFormData>>({});
+  const entities = getEntities();
+  const statuses = getStatuses();
 
   useEffect(() => {
-    if (isEditing && inventoryNumber) {
+    if (inventoryNumber) {
       const allEquipment = getEquipment();
-      const equipment = allEquipment.find(eq => eq.inventoryNumber === inventoryNumber);
-      if (equipment) {
-        setFormData({
-          name: equipment.name,
-          type: equipment.type,
-          department: equipment.department,
-          status: equipment.status,
-          user: equipment.user,
-          location: equipment.location,
-          manufacturer: equipment.manufacturer,
-          model: equipment.model,
-          inventoryNumber: equipment.inventoryNumber,
-          serialNumber: equipment.serialNumber,
-          comment: equipment.comment,
-          purchaseDate: equipment.purchaseDate,
-          supplier: equipment.supplier,
-          invoiceNumber: equipment.invoiceNumber,
-          contractNumber: equipment.contractNumber,
-          cost: equipment.cost.toString(),
-          project: equipment.project,
-          warrantyMonths: equipment.warrantyMonths.toString(),
-        });
+      const foundEquipment = allEquipment.find((eq: Equipment) => eq.inventoryNumber === inventoryNumber);
+      if (foundEquipment) {
+        setEquipmentData(foundEquipment);
       }
     }
-  }, [inventoryNumber, isEditing]);
+  }, [inventoryNumber]);
 
-  const handleInputChange = (field: keyof EquipmentFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!equipmentData.name?.trim()) {
+      newErrors.name = 'Наименование обязательно';
     }
-  };
-
-  const validateForm = (): boolean => {
-    const newErrors: Partial<EquipmentFormData> = {};
-
-    if (!formData.name.trim()) newErrors.name = 'Название обязательно';
-    if (!formData.type) newErrors.type = 'Тип техники обязателен';
-    if (!formData.department) newErrors.department = 'Департамент обязателен';
-    if (!formData.status) newErrors.status = 'Статус обязателен';
-    if (!formData.location.trim()) newErrors.location = 'Местоположение обязательно';
-    if (!formData.manufacturer.trim()) newErrors.manufacturer = 'Производитель обязателен';
-    if (!formData.model.trim()) newErrors.model = 'Модель обязательна';
-    if (!formData.inventoryNumber.trim()) newErrors.inventoryNumber = 'Инвентарный номер обязателен';
-    if (!formData.serialNumber.trim()) newErrors.serialNumber = 'Серийный номер обязателен';
+    if (!equipmentData.type?.trim()) {
+      newErrors.type = 'Тип обязателен';
+    }
+    if (!equipmentData.department?.trim()) {
+      newErrors.department = 'Департамент обязателен';
+    }
+    if (!equipmentData.status?.trim()) {
+      newErrors.status = 'Статус обязателен';
+    }
+    if (!equipmentData.inventoryNumber?.trim()) {
+      newErrors.inventoryNumber = 'Инвентарный номер обязателен';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -131,360 +96,348 @@ const EquipmentForm = () => {
     }
 
     try {
-      const equipmentData = {
-        name: formData.name.trim(),
-        type: formData.type,
-        department: formData.department,
-        status: formData.status,
-        user: formData.user.trim(),
-        location: formData.location.trim(),
-        manufacturer: formData.manufacturer.trim(),
-        model: formData.model.trim(),
-        inventoryNumber: formData.inventoryNumber.trim(),
-        serialNumber: formData.serialNumber.trim(),
-        comment: formData.comment.trim(),
-        purchaseDate: formData.purchaseDate,
-        supplier: formData.supplier.trim(),
-        invoiceNumber: formData.invoiceNumber.trim(),
-        contractNumber: formData.contractNumber.trim(),
-        cost: parseFloat(formData.cost) || 0,
-        project: formData.project.trim(),
-        warrantyMonths: parseInt(formData.warrantyMonths) || 0,
-      };
-
       if (isEditing && inventoryNumber) {
-        const updated = updateEquipmentByInventoryNumber(inventoryNumber, equipmentData);
-        if (updated) {
-          addNotification({
-            type: 'success',
-            title: 'Успешно!',
-            message: 'Оборудование обновлено',
+        // Редактирование существующего оборудования
+        const updatedEquipment = updateEquipmentByInventoryNumber(inventoryNumber, equipmentData);
+        if (updatedEquipment) {
+          // Добавляем действие в лог
+          addAction({
+            type: 'update',
+            description: `Обновлено оборудование "${equipmentData.name}" (${inventoryNumber}) - изменены основные параметры`,
+            entityType: 'Оборудование',
+            entityId: inventoryNumber,
+            oldData: null, // Здесь можно добавить старые данные
+            newData: equipmentData,
+            canUndo: true,
           });
-        } else {
-          addNotification({
-            type: 'error',
-            title: 'Ошибка!',
-            message: 'Не удалось обновить оборудование',
-          });
-          return;
+
+          // Показываем уведомление
+          if (window.notificationSystem) {
+            window.notificationSystem.addNotification({
+              type: 'success',
+              title: 'Обновлено',
+              message: `Оборудование "${equipmentData.name}" успешно обновлено`,
+            });
+          }
+
+          navigate(`/equipment/${inventoryNumber}`);
         }
       } else {
-        const newEquipment = addEquipment(equipmentData);
-        addNotification({
-          type: 'success',
-          title: 'Успешно!',
-          message: `Оборудование "${newEquipment.name}" добавлено в базу`,
+        // Создание нового оборудования
+        const newEquipment = addEquipment(equipmentData as Equipment);
+        if (newEquipment) {
+          // Добавляем действие в лог
+          addAction({
+            type: 'create',
+            description: `Создано новое оборудование "${equipmentData.name}" (${equipmentData.inventoryNumber}) - тип: ${equipmentData.type}, департамент: ${equipmentData.department}, статус: ${equipmentData.status}`,
+            entityType: 'Оборудование',
+            entityId: newEquipment.inventoryNumber,
+            oldData: null,
+            newData: newEquipment,
+            canUndo: true,
+          });
+
+          // Показываем уведомление
+          if (window.notificationSystem) {
+            window.notificationSystem.addNotification({
+              type: 'success',
+              title: 'Создано',
+              message: `Новое оборудование "${equipmentData.name}" успешно создано`,
+            });
+          }
+
+          navigate('/equipment');
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при сохранении:', error);
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'error',
+          title: 'Ошибка',
+          message: 'Не удалось сохранить оборудование',
         });
       }
+    }
+  };
 
-      navigate('/equipment');
-    } catch (error) {
-      console.error('Ошибка сохранения:', error);
-      addNotification({
-        type: 'error',
-        title: 'Ошибка!',
-        message: 'Произошла ошибка при сохранении',
-      });
+  const handleInputChange = (field: keyof Equipment, value: any) => {
+    setEquipmentData(prev => ({ ...prev, [field]: value }));
+    // Очищаем ошибку для поля при изменении
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
 
   return (
-    <Box>
+    <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/equipment')}
+          onClick={() => navigate(-1)}
           sx={{ mr: 2 }}
         >
-          Назад к списку
+          Назад
         </Button>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-          {isEditing ? 'Редактировать оборудование' : 'Добавить оборудование'}
+        <Typography variant="h4" component="h1">
+          {isEditing ? 'Редактирование оборудования' : 'Новое оборудование'}
         </Typography>
       </Box>
 
-      <Paper sx={{ p: 4 }}>
+      {submitSuccess && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          Оборудование успешно {isEditing ? 'обновлено' : 'создано'}!
+        </Alert>
+      )}
+
+      <Paper sx={{ p: 3 }}>
         <form onSubmit={handleSubmit}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* Основная информация */}
-            <Box sx={{ width: '100%' }}>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
-                Основная информация
-              </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+            <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+              <TextField
+                fullWidth
+                label="Инвентарный номер"
+                value={equipmentData.inventoryNumber || ''}
+                onChange={(e) => handleInputChange('inventoryNumber', e.target.value)}
+                error={!!errors.inventoryNumber}
+                helperText={errors.inventoryNumber}
+                required
+                margin="normal"
+              />
             </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <TextField
-                  fullWidth
-                  label="Наименование"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  error={Boolean(errors.name)}
-                  helperText={errors.name}
-                  required
-                />
-              </Box>
-
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <FormControl fullWidth error={Boolean(errors.type)} required>
-                  <InputLabel>Тип техники</InputLabel>
+            <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+              <TextField
+                fullWidth
+                label="Серийный номер"
+                value={equipmentData.serialNumber || ''}
+                onChange={(e) => handleInputChange('serialNumber', e.target.value)}
+                margin="normal"
+              />
+            </Box>
+            <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+              <TextField
+                fullWidth
+                label="Наименование"
+                value={equipmentData.name || ''}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                error={!!errors.name}
+                helperText={errors.name}
+                required
+                margin="normal"
+              />
+            </Box>
+            <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+              <TextField
+                fullWidth
+                label="Модель"
+                value={equipmentData.model || ''}
+                onChange={(e) => handleInputChange('model', e.target.value)}
+                margin="normal"
+              />
+            </Box>
+                          <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+                <FormControl fullWidth margin="normal" error={!!errors.type}>
+                  <InputLabel>Тип *</InputLabel>
                   <Select
-                    value={formData.type}
+                    value={equipmentData.type || ''}
+                    label="Тип *"
                     onChange={(e) => handleInputChange('type', e.target.value)}
-                    label="Тип техники"
                   >
-                    {entities.types.map((type) => (
-                      <MenuItem key={type.id} value={type.name}>{type.name}</MenuItem>
+                    {entities.types?.map((type) => (
+                      <MenuItem key={type.id} value={type.name}>
+                        {type.name}
+                      </MenuItem>
                     ))}
                   </Select>
-                  {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
                 </FormControl>
               </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <FormControl fullWidth error={Boolean(errors.department)} required>
-                  <InputLabel>Департамент</InputLabel>
+                <FormControl fullWidth margin="normal" error={!!errors.department}>
+                  <InputLabel>Департамент *</InputLabel>
                   <Select
-                    value={formData.department}
+                    value={equipmentData.department || ''}
+                    label="Департамент *"
                     onChange={(e) => handleInputChange('department', e.target.value)}
-                    label="Департамент"
                   >
-                    {entities.departments.map((dept) => (
-                      <MenuItem key={dept.id} value={dept.name}>{dept.name}</MenuItem>
+                    {entities.departments?.map((dept) => (
+                      <MenuItem key={dept.id} value={dept.name}>
+                        {dept.name}
+                      </MenuItem>
                     ))}
                   </Select>
-                  {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
                 </FormControl>
               </Box>
-
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <FormControl fullWidth error={Boolean(errors.status)} required>
-                  <InputLabel>Статус</InputLabel>
+                <FormControl fullWidth margin="normal" error={!!errors.status}>
+                  <InputLabel>Статус *</InputLabel>
                   <Select
-                    value={formData.status}
+                    value={equipmentData.status || ''}
+                    label="Статус *"
                     onChange={(e) => handleInputChange('status', e.target.value)}
-                    label="Статус"
                   >
-                    {['Активно', 'Ремонт', 'Списано', 'На обслуживании', 'Резерв'].map((status) => (
-                      <MenuItem key={status} value={status}>{status}</MenuItem>
+                    {statuses.map((status) => (
+                      <MenuItem key={status.name} value={status.name}>
+                        <Chip
+                          label={status.name}
+                          color={status.color as any}
+                          size="small"
+                          sx={{ mr: 1 }}
+                        />
+                        {status.name}
+                      </MenuItem>
                     ))}
                   </Select>
-                  {errors.status && <FormHelperText>{errors.status}</FormHelperText>}
                 </FormControl>
               </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel>Местоположение</InputLabel>
+                  <Select
+                    value={equipmentData.location || ''}
+                    label="Местоположение"
+                    onChange={(e) => handleInputChange('location', e.target.value)}
+                  >
+                    {entities.locations?.map((location) => (
+                      <MenuItem key={location.id} value={location.fullPath}>
+                        {location.fullPath}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
                   label="Пользователь"
-                  value={formData.user}
+                  value={equipmentData.user || ''}
                   onChange={(e) => handleInputChange('user', e.target.value)}
-                  placeholder="ФИО пользователя"
+                  margin="normal"
                 />
               </Box>
-
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <FormControl fullWidth error={Boolean(errors.location)} required>
-                  <InputLabel>Местоположение</InputLabel>
-                  <Select
-                    value={formData.location}
-                    onChange={(e) => handleInputChange('location', e.target.value)}
-                    label="Местоположение"
-                  >
-                    {entities.locations.map((location) => (
-                      <MenuItem key={location.id} value={location.fullPath}>{location.fullPath}</MenuItem>
-                    ))}
-                  </Select>
-                  {errors.location && <FormHelperText>{errors.location}</FormHelperText>}
-                </FormControl>
-              </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <TextField
-                  fullWidth
-                  label="Производитель"
-                  value={formData.manufacturer}
-                  onChange={(e) => handleInputChange('manufacturer', e.target.value)}
-                  error={Boolean(errors.manufacturer)}
-                  helperText={errors.manufacturer}
-                  required
-                />
-              </Box>
-
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <TextField
-                  fullWidth
-                  label="Модель"
-                  value={formData.model}
-                  onChange={(e) => handleInputChange('model', e.target.value)}
-                  error={Boolean(errors.model)}
-                  helperText={errors.model}
-                  required
-                />
-              </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <TextField
-                  fullWidth
-                  label="Инвентарный номер"
-                  value={formData.inventoryNumber}
-                  onChange={(e) => handleInputChange('inventoryNumber', e.target.value)}
-                  error={Boolean(errors.inventoryNumber)}
-                  helperText={errors.inventoryNumber}
-                  required
-                />
-              </Box>
-
-              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <TextField
-                  fullWidth
-                  label="Серийный номер"
-                  value={formData.serialNumber}
-                  onChange={(e) => handleInputChange('serialNumber', e.target.value)}
-                  error={Boolean(errors.serialNumber)}
-                  helperText={errors.serialNumber}
-                  required
-                />
-              </Box>
-            </Box>
-
-            <Box sx={{ flex: '1 1 100%', minWidth: 0 }}>
-              <TextField
-                fullWidth
-                label="Комментарий"
-                value={formData.comment}
-                onChange={(e) => handleInputChange('comment', e.target.value)}
-                multiline
-                rows={4}
-                placeholder="Дополнительная информация об оборудовании..."
-              />
-            </Box>
-
-            {/* Финансовая информация */}
-            <Box sx={{ width: '100%' }}>
-              <Box sx={{ borderTop: '1px solid', borderColor: 'divider', my: 2, pt: 2 }} />
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
-                Финансовая информация
-              </Typography>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
                   label="Дата приобретения"
                   type="date"
-                  value={formData.purchaseDate}
+                  value={equipmentData.purchaseDate || ''}
                   onChange={(e) => handleInputChange('purchaseDate', e.target.value)}
+                  margin="normal"
                   InputLabelProps={{ shrink: true }}
                 />
               </Box>
-
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Поставщик</InputLabel>
-                  <Select
-                    value={formData.supplier}
-                    onChange={(e) => handleInputChange('supplier', e.target.value)}
-                    label="Поставщик"
-                  >
-                    {entities.suppliers.map((supplier) => (
-                      <MenuItem key={supplier.id} value={supplier.name}>{supplier.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <TextField
+                  fullWidth
+                  label="Гарантия до"
+                  type="date"
+                  value={equipmentData.warrantyDate || ''}
+                  onChange={(e) => handleInputChange('warrantyDate', e.target.value)}
+                  margin="normal"
+                  InputLabelProps={{ shrink: true }}
+                />
               </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+                <TextField
+                  fullWidth
+                  label="Поставщик"
+                  value={equipmentData.supplier || ''}
+                  onChange={(e) => handleInputChange('supplier', e.target.value)}
+                  margin="normal"
+                />
+              </Box>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
                   label="Номер счета"
-                  value={formData.invoiceNumber}
+                  value={equipmentData.invoiceNumber || ''}
                   onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
+                  margin="normal"
                 />
               </Box>
-
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
                   label="Номер договора"
-                  value={formData.contractNumber}
+                  value={equipmentData.contractNumber || ''}
                   onChange={(e) => handleInputChange('contractNumber', e.target.value)}
+                  margin="normal"
                 />
               </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
                   label="Стоимость"
                   type="number"
-                  value={formData.cost}
+                  value={equipmentData.cost || ''}
                   onChange={(e) => handleInputChange('cost', e.target.value)}
-                  InputProps={{
-                    endAdornment: <Typography variant="body2">₽</Typography>,
-                  }}
+                  margin="normal"
                 />
               </Box>
-
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Проект</InputLabel>
-                  <Select
-                    value={formData.project}
-                    onChange={(e) => handleInputChange('project', e.target.value)}
-                    label="Проект"
-                  >
-                    {entities.projects.map((project) => (
-                      <MenuItem key={project.id} value={project.name}>{project.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <TextField
+                  fullWidth
+                  label="Проект"
+                  value={equipmentData.project || ''}
+                  onChange={(e) => handleInputChange('project', e.target.value)}
+                  margin="normal"
+                />
               </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
                   label="Гарантия (месяцев)"
                   type="number"
-                  value={formData.warrantyMonths}
+                  value={equipmentData.warrantyMonths || ''}
                   onChange={(e) => handleInputChange('warrantyMonths', e.target.value)}
-                  inputProps={{ min: 0, max: 120 }}
+                  margin="normal"
+                />
+              </Box>
+              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+                <TextField
+                  fullWidth
+                  label="Стеллаж"
+                  value={equipmentData.rack || ''}
+                  onChange={(e) => handleInputChange('rack', e.target.value)}
+                  margin="normal"
+                />
+              </Box>
+              <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
+                <TextField
+                  fullWidth
+                  label="Бюджет"
+                  type="number"
+                  value={equipmentData.budget || ''}
+                  onChange={(e) => handleInputChange('budget', e.target.value)}
+                  margin="normal"
+                />
+              </Box>
+              <Box sx={{ flex: '1 1 100%', minWidth: 0 }}>
+                <TextField
+                  fullWidth
+                  label="Комментарий"
+                  value={equipmentData.comment || ''}
+                  onChange={(e) => handleInputChange('comment', e.target.value)}
+                  margin="normal"
+                  multiline
+                  rows={3}
                 />
               </Box>
             </Box>
 
-            <Box sx={{ width: '100%' }}>
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => navigate('/equipment')}
-                >
-                  Отмена
-                </Button>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  size="large"
-                >
-                  {isEditing ? 'Сохранить изменения' : 'Добавить оборудование'}
-                </Button>
-              </Box>
-            </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={() => navigate(-1)}
+            >
+              Отмена
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              startIcon={<SaveIcon />}
+            >
+              {isEditing ? 'Обновить' : 'Создать'}
+            </Button>
           </Box>
         </form>
       </Paper>

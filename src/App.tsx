@@ -8,37 +8,30 @@ import EquipmentDetail from './pages/EquipmentDetail';
 import Administration from './pages/Administration';
 import Inventory from './pages/Inventory';
 import Printers from './pages/Printers';
-import NotificationSystem, { Notification } from './components/NotificationSystem';
+import ActionLog from './components/ActionLog';
+import { ActionLogProvider, useActionLog } from './contexts/ActionLogContext';
 import { NotificationContext } from './contexts/NotificationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Sidebar from './components/Sidebar';
 
-function App() {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'info',
-      title: 'Добро пожаловать!',
-      message: 'Система управления IT-инвентарем готова к работе',
-      timestamp: new Date(),
-      read: false,
-    },
-    {
-      id: '2',
-      type: 'warning',
-      title: 'Гарантия истекает',
-      message: 'У 3 единиц оборудования скоро истекает гарантия',
-      timestamp: new Date(Date.now() - 3600000),
-      read: false,
-      action: {
-        label: 'Просмотреть',
-        onClick: () => console.log('Просмотр оборудования с истекающей гарантией'),
-      },
-    },
-  ]);
+// Компонент для отображения ActionLog
+const ActionLogWrapper = () => {
+  const { actions, undoAction, clearHistory } = useActionLog();
+  
+  return (
+    <ActionLog
+      actions={actions}
+      onUndo={undoAction}
+      onClearHistory={clearHistory}
+    />
+  );
+};
 
-  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: Notification = {
+function App() {
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  const addNotification = useCallback((notification: any) => {
+    const newNotification = {
       ...notification,
       id: Date.now().toString(),
       timestamp: new Date(),
@@ -76,38 +69,36 @@ function App() {
   return (
     <ThemeProvider>
       <CssBaseline />
-      <NotificationContext.Provider value={notificationContextValue}>
-        <Router>
-          <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-            <Sidebar />
-            <Box
-              component="main"
-              sx={{
-                flexGrow: 1,
-                p: 3,
-                backgroundColor: 'background.default',
-                minHeight: '100vh',
-              }}
-            >
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/equipment" element={<EquipmentList />} />
-                <Route path="/equipment/new" element={<EquipmentForm />} />
-                <Route path="/equipment/edit/:inventoryNumber" element={<EquipmentForm />} />
-                <Route path="/equipment/:inventoryNumber" element={<EquipmentDetail />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/printers" element={<Printers />} />
-                <Route path="/administration" element={<Administration />} />
-              </Routes>
+      <ActionLogProvider>
+        <NotificationContext.Provider value={notificationContextValue}>
+          <Router>
+            <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+              <Sidebar />
+              <Box
+                component="main"
+                sx={{
+                  flexGrow: 1,
+                  p: 3,
+                  backgroundColor: 'background.default',
+                  minHeight: '100vh',
+                }}
+              >
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/equipment" element={<EquipmentList />} />
+                  <Route path="/equipment/new" element={<EquipmentForm />} />
+                  <Route path="/equipment/edit/:inventoryNumber" element={<EquipmentForm />} />
+                  <Route path="/equipment/:inventoryNumber" element={<EquipmentDetail />} />
+                  <Route path="/inventory" element={<Inventory />} />
+                  <Route path="/printers" element={<Printers />} />
+                  <Route path="/administration" element={<Administration />} />
+                </Routes>
+              </Box>
+              <ActionLogWrapper />
             </Box>
-            <NotificationSystem
-              notifications={notifications}
-              onMarkAsRead={markAsRead}
-              onClearAll={clearAll}
-            />
-          </Box>
-        </Router>
-      </NotificationContext.Provider>
+          </Router>
+        </NotificationContext.Provider>
+      </ActionLogProvider>
     </ThemeProvider>
   );
 }
