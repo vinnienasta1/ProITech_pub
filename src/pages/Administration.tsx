@@ -1,0 +1,861 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Typography,
+  Paper,
+  Tabs,
+  Tab,
+  Card,
+  CardContent,
+  CardActions,
+  Button,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Switch,
+  FormControlLabel,
+  Slider,
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Settings as SettingsIcon,
+  Category as CategoryIcon,
+  LocationOn as LocationIcon,
+  Business as BusinessIcon,
+  CheckCircle as StatusIcon,
+  LocalShipping as SupplierIcon,
+  Assignment as ProjectIcon,
+  Storage as RackIcon,
+  Palette as PaletteIcon,
+} from '@mui/icons-material';
+import { getStatuses, saveStatuses, defaultStatuses, StatusItem } from '../storage/statusStorage';
+import { getEntities, saveEntities, EquipmentType, Department, Supplier, Project, Location, Shelf } from '../storage/entitiesStorage';
+import ColorPicker from '../components/ColorPicker';
+import { useTheme } from '../contexts/ThemeContext';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`admin-tabpanel-${index}`}
+      aria-labelledby={`admin-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+}
+
+interface Status extends StatusItem {}
+
+// Убираем неиспользуемые интерфейсы и переменные
+// interface ThemeSettings {
+//   mode: 'light' | 'dark';
+//   preset: 'standard' | 'dark' | 'professional' | 'bright';
+//   borderRadius: number;
+//   spacing: number;
+//   fontSize: 'small' | 'medium' | 'large';
+// }
+
+// const defaultThemeSettings: ThemeSettings = {
+//   mode: 'light',
+//   preset: 'standard',
+//   borderRadius: 8,
+//   spacing: 8,
+//   fontSize: 'medium',
+// };
+
+// const themePresets = {
+//   standard: {
+//     mode: 'light' as const,
+//     primaryColor: '#1976d2',
+//     secondaryColor: '#dc004e',
+//     backgroundColor: '#ffffff',
+//     textColor: '#000000',
+//   },
+//   dark: {
+//     mode: 'dark' as const,
+//     primaryColor: '#90caf9',
+//     secondaryColor: '#f48fb1',
+//     backgroundColor: '#121212',
+//     textColor: '#ffffff',
+//   },
+//   professional: {
+//     mode: 'light' as const,
+//     primaryColor: '#2e7d32',
+//     secondaryColor: '#d32f2f',
+//     backgroundColor: '#fafafa',
+//     textColor: '#212121',
+//   },
+//   bright: {
+//     mode: 'light' as const,
+//     primaryColor: '#ff6f00',
+//     secondaryColor: '#6a1b9a',
+//     backgroundColor: '#fff8e1',
+//     textColor: '#3e2723',
+//   },
+// };
+
+// Используем данные из entities вместо mock данных
+
+const Administration = () => {
+  const { themeSettings, updateTheme } = useTheme();
+  const [tabValue, setTabValue] = useState(0);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [dialogType, setDialogType] = useState<'equipmentType' | 'department' | 'status' | 'supplier' | 'project' | 'location' | 'shelf'>('equipmentType');
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [formData, setFormData] = useState<any>({});
+  const [statuses, setStatuses] = useState<StatusItem[]>([]);
+  const [entities, setEntities] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      setStatuses(getStatuses());
+      setEntities(getEntities());
+      
+      // Убираем загрузку настроек темы, так как теперь используем контекст
+      // const savedTheme = localStorage.getItem('theme_settings');
+      // if (savedTheme) {
+      //   try {
+      //     updateTheme(JSON.parse(savedTheme));
+      //   } catch (e) {
+      //     console.error('Ошибка загрузки настроек темы:', e);
+      //   }
+      // }
+    } catch (error) {
+      console.error('Ошибка инициализации страницы администрирования:', error);
+    }
+  }, []);
+
+  const upsertStatus = (data: StatusItem) => {
+    setStatuses(prev => {
+              let next: StatusItem[];
+      if (editingItem) {
+        next = prev.map(s => s.id === editingItem.id ? { ...editingItem, ...data } : s);
+      } else {
+        const newId = prev.length ? Math.max(...prev.map(s => s.id)) + 1 : 1;
+        next = [...prev, { ...data, id: newId }];
+      }
+      saveStatuses(next);
+      return next;
+    });
+  };
+
+  const deleteStatus = (id: number) => {
+    setStatuses(prev => {
+      const next = prev.filter(s => s.id !== id);
+      saveStatuses(next);
+      return next;
+    });
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  const handleAdd = (type: typeof dialogType) => {
+    setDialogType(type);
+    setEditingItem(null);
+    setFormData({});
+    setOpenDialog(true);
+  };
+
+  const handleEdit = (type: typeof dialogType, item: any) => {
+    setDialogType(type);
+    setEditingItem(item);
+    setFormData({ ...item });
+    setOpenDialog(true);
+  };
+
+  const handleDelete = (type: typeof dialogType, id: number) => {
+    if (type === 'status') {
+      deleteStatus(id);
+      return;
+    }
+    const key = type === 'equipmentType' ? 'types' :
+      type === 'department' ? 'departments' :
+      type === 'supplier' ? 'suppliers' :
+      type === 'project' ? 'projects' :
+      type === 'shelf' ? 'shelves' : 'locations';
+    const next = { ...entities, [key]: (entities as any)[key].filter((x: any) => x.id !== id) };
+    setEntities(next);
+    saveEntities(next);
+  };
+
+  const handleSave = () => {
+    if (dialogType === 'status') {
+      const payload: StatusItem = {
+        id: editingItem?.id ?? 0,
+        name: formData.name || 'Без названия',
+        color: formData.color || '#607d8b',
+        description: formData.description || '',
+      };
+      upsertStatus(payload);
+      setOpenDialog(false);
+      return;
+    }
+    const key = dialogType === 'equipmentType' ? 'types' :
+      dialogType === 'department' ? 'departments' :
+      dialogType === 'supplier' ? 'suppliers' :
+      dialogType === 'project' ? 'projects' :
+      dialogType === 'shelf' ? 'shelves' : 'locations';
+    const list = (entities as any)[key] as any[];
+    let updated: any[];
+    if (editingItem) {
+      updated = list.map((x: any) => x.id === editingItem.id ? { ...editingItem, ...formData } : x);
+    } else {
+      const newId = list.length ? Math.max(...list.map((x: any) => x.id)) + 1 : 1;
+      updated = [...list, { id: newId, ...formData }];
+    }
+    const next = { ...entities, [key]: updated };
+    setEntities(next);
+    saveEntities(next);
+    setOpenDialog(false);
+  };
+
+  const handleThemeChange = (field: keyof typeof themeSettings, value: any) => {
+    updateTheme({ [field]: value });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'success';
+      case 'completed': return 'info';
+      case 'on-hold': return 'warning';
+      default: return 'default';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'active': return 'Активный';
+      case 'completed': return 'Завершен';
+      case 'on-hold': return 'Приостановлен';
+      default: return status;
+    }
+  };
+
+  // Если данные еще не загружены, показываем загрузку
+  if (!entities) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <Typography variant="h6">Загрузка...</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Typography variant="h4" component="h1" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+        <SettingsIcon sx={{ mr: 2, color: 'primary.main' }} />
+        Администрирование
+      </Typography>
+
+      <Paper sx={{ width: '100%' }}>
+        <Tabs value={tabValue} onChange={handleTabChange} aria-label="admin tabs">
+          <Tab label="Типы техники" icon={<CategoryIcon />} iconPosition="start" />
+          <Tab label="Департаменты" icon={<BusinessIcon />} iconPosition="start" />
+          <Tab label="Статусы" icon={<StatusIcon />} iconPosition="start" />
+          <Tab label="Поставщики" icon={<SupplierIcon />} iconPosition="start" />
+          <Tab label="Проекты" icon={<ProjectIcon />} iconPosition="start" />
+          <Tab label="Местоположения" icon={<LocationIcon />} iconPosition="start" />
+          <Tab label="Стеллажи" icon={<RackIcon />} iconPosition="start" />
+          <Tab label="Внешний вид" icon={<PaletteIcon />} iconPosition="start" />
+        </Tabs>
+
+        {/* Типы техники */}
+        <TabPanel value={tabValue} index={0}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Типы техники</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('equipmentType')}
+            >
+              Добавить тип
+            </Button>
+          </Box>
+                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+             {entities?.types?.map((type: any) => (
+              <Card key={type.id} sx={{ minWidth: 250, flex: '1 1 250px' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Box
+                      sx={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        backgroundColor: type.color,
+                        mr: 1,
+                      }}
+                    />
+                    <Typography variant="h6">{type.name}</Typography>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    {type.description}
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button size="small" onClick={() => handleEdit('equipmentType', type)}>
+                    Редактировать
+                  </Button>
+                  <Button size="small" color="error" onClick={() => handleDelete('equipmentType', type.id)}>
+                    Удалить
+                  </Button>
+                </CardActions>
+              </Card>
+            ))}
+          </Box>
+        </TabPanel>
+
+        {/* Департаменты */}
+        <TabPanel value={tabValue} index={1}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Департаменты</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('department')}
+            >
+              Добавить департамент
+            </Button>
+          </Box>
+                     <List>
+             {entities?.departments?.map((dept: any) => (
+              <React.Fragment key={dept.id}>
+                <ListItem>
+                  <ListItemText
+                    primary={dept.name}
+                    secondary={`Код: ${dept.code} | Руководитель: ${dept.manager}`}
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton onClick={() => handleEdit('department', dept)}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete('department', dept.id)} color="error">
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
+        </TabPanel>
+
+        {/* Статусы */}
+        <TabPanel value={tabValue} index={2}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Статусы оборудования</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('status')}
+            >
+              Добавить статус
+            </Button>
+          </Box>
+                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+             {statuses?.map((status) => (
+              <Card key={status.id} sx={{ minWidth: 250, flex: '1 1 250px' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Chip
+                      label={status.name}
+                      size="small"
+                      sx={{ backgroundColor: status.color, color: 'white' }}
+                    />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    {status.description}
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button size="small" onClick={() => handleEdit('status', status)}>
+                    Редактировать
+                  </Button>
+                  <Button size="small" color="error" onClick={() => handleDelete('status', status.id)}>
+                    Удалить
+                  </Button>
+                </CardActions>
+              </Card>
+            ))}
+          </Box>
+        </TabPanel>
+
+        {/* Поставщики */}
+        <TabPanel value={tabValue} index={3}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Поставщики</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('supplier')}
+            >
+              Добавить поставщика
+            </Button>
+          </Box>
+                     <List>
+             {entities?.suppliers?.map((supplier: any) => (
+              <React.Fragment key={supplier.id}>
+                <ListItem>
+                  <ListItemText
+                    primary={supplier.name}
+                    secondary={`Контакт: ${supplier.contact} | ${supplier.phone} | ${supplier.email}`}
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton onClick={() => handleEdit('supplier', supplier)}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete('supplier', supplier.id)} color="error">
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
+        </TabPanel>
+
+        {/* Проекты */}
+        <TabPanel value={tabValue} index={4}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Проекты</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('project')}
+            >
+              Добавить проект
+            </Button>
+          </Box>
+                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+             {entities?.projects?.map((project: any) => (
+              <Card key={project.id} sx={{ minWidth: 250, flex: '1 1 250px' }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    {project.name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Код: {project.code}
+                  </Typography>
+                  <Chip
+                    label={getStatusLabel(project.status)}
+                    color={getStatusColor(project.status) as any}
+                    size="small"
+                  />
+                </CardContent>
+                <CardActions>
+                  <Button size="small" onClick={() => handleEdit('project', project)}>
+                    Редактировать
+                  </Button>
+                  <Button size="small" color="error" onClick={() => handleDelete('project', project.id)}>
+                    Удалить
+                  </Button>
+                </CardActions>
+              </Card>
+            ))}
+          </Box>
+        </TabPanel>
+
+        {/* Местоположения */}
+        <TabPanel value={tabValue} index={5}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Местоположения</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('location')}
+            >
+              Добавить местоположение
+            </Button>
+          </Box>
+                     <List>
+             {entities?.locations?.map((location: any) => (
+              <ListItem key={location.id} divider>
+                <ListItemText
+                  primary={location.fullPath}
+                  secondary={location.description}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton onClick={() => handleEdit('location', location)} size="small">
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton onClick={() => handleDelete('location', location.id)} size="small" color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </TabPanel>
+        {/* Стеллажи */}
+        <TabPanel value={tabValue} index={6}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Стеллажи</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('shelf')}
+            >
+              Добавить стеллаж
+            </Button>
+          </Box>
+                     <List>
+             {entities?.shelves?.map((shelf: any) => (
+              <React.Fragment key={shelf.id}>
+                <ListItem>
+                  <ListItemText primary={shelf.name} />
+                  <ListItemSecondaryAction>
+                    <IconButton onClick={() => handleEdit('shelf', shelf)} size="small">
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete('shelf', shelf.id)} size="small" color="error">
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
+        </TabPanel>
+
+        {/* TabPanel for Appearance */}
+        <TabPanel value={tabValue} index={7}>
+          <Typography variant="h6" sx={{ mb: 3 }}>Настройки внешнего вида</Typography>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* Theme Mode */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Режим темы</Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={themeSettings.mode === 'dark'}
+                    onChange={(e) => handleThemeChange('mode', e.target.checked ? 'dark' : 'light')}
+                  />
+                }
+                label="Темная тема"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {themeSettings.mode === 'dark' 
+                  ? 'Темная тема активна. Все элементы интерфейса будут отображаться в темных тонах.' 
+                  : 'Светлая тема активна. Все элементы интерфейса будут отображаться в светлых тонах.'}
+              </Typography>
+            </Paper>
+
+            {/* Visual Settings */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Визуальные настройки</Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box>
+                  <Typography variant="body2" gutterBottom>
+                    Скругление углов: {themeSettings.borderRadius}px
+                  </Typography>
+                  <Slider
+                    value={themeSettings.borderRadius}
+                    onChange={(_, value) => handleThemeChange('borderRadius', value)}
+                    min={0}
+                    max={20}
+                    step={1}
+                    marks
+                    valueLabelDisplay="auto"
+                  />
+                </Box>
+                
+                <Box>
+                  <Typography variant="body2" gutterBottom>
+                    Межэлементные отступы: {themeSettings.spacing}px
+                  </Typography>
+                  <Slider
+                    value={themeSettings.spacing}
+                    onChange={(_, value) => handleThemeChange('spacing', value)}
+                    min={4}
+                    max={16}
+                    step={2}
+                    marks
+                    valueLabelDisplay="auto"
+                  />
+                </Box>
+
+                <FormControl>
+                  <InputLabel>Размер шрифта</InputLabel>
+                  <Select
+                    value={themeSettings.fontSize}
+                    onChange={(e) => handleThemeChange('fontSize', e.target.value)}
+                    label="Размер шрифта"
+                  >
+                    <MenuItem value="small">Маленький</MenuItem>
+                    <MenuItem value="medium">Средний</MenuItem>
+                    <MenuItem value="large">Большой</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            </Paper>
+
+            {/* Preview */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Предварительный просмотр</Typography>
+              <Box sx={{ 
+                p: 3, 
+                borderRadius: themeSettings.borderRadius,
+                backgroundColor: themeSettings.mode === 'dark' ? '#1e1e1e' : '#ffffff',
+                color: themeSettings.mode === 'dark' ? '#ffffff' : '#000000',
+                border: `2px solid ${themeSettings.mode === 'dark' ? '#90caf9' : '#1976d2'}`,
+                gap: themeSettings.spacing,
+                display: 'flex',
+                flexDirection: 'column',
+              }}>
+                <Typography variant="h6" sx={{ color: themeSettings.mode === 'dark' ? '#90caf9' : '#1976d2' }}>
+                  Пример заголовка
+                </Typography>
+                <Typography variant="body1">
+                  Это пример текста с выбранными настройками темы.
+                </Typography>
+                <Button 
+                  variant="contained" 
+                  sx={{ 
+                    backgroundColor: themeSettings.mode === 'dark' ? '#90caf9' : '#1976d2',
+                    color: themeSettings.mode === 'dark' ? '#000000' : '#ffffff',
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  Пример кнопки
+                </Button>
+              </Box>
+            </Paper>
+          </Box>
+        </TabPanel>
+      </Paper>
+
+      {/* Диалог добавления/редактирования */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editingItem ? 'Редактировать' : 'Добавить'} {
+            dialogType === 'equipmentType' ? 'тип техники' :
+            dialogType === 'department' ? 'департамент' :
+            dialogType === 'status' ? 'статус' :
+            dialogType === 'supplier' ? 'поставщика' :
+            dialogType === 'project' ? 'проект' :
+            dialogType === 'shelf' ? 'стеллаж' :
+            'местоположение'
+          }
+        </DialogTitle>
+        <DialogContent>
+          {dialogType === 'equipmentType' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название типа"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <ColorPicker
+                value={formData.color || '#2196f3'}
+                onChange={(color) => setFormData({ ...formData, color })}
+                label="Цвет типа"
+              />
+              <TextField
+                fullWidth
+                label="Описание"
+                multiline
+                rows={3}
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                sx={{ mt: 2 }}
+              />
+            </Box>
+          )}
+
+          {dialogType === 'department' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название департамента"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Код департамента"
+                value={formData.code || ''}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Руководитель"
+                value={formData.manager || ''}
+                onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+              />
+            </Box>
+          )}
+
+          {dialogType === 'status' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название статуса"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <ColorPicker
+                value={formData.color || '#607d8b'}
+                onChange={(color) => setFormData({ ...formData, color })}
+                label="Цвет статуса"
+              />
+              <TextField
+                fullWidth
+                label="Описание"
+                multiline
+                rows={3}
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                sx={{ mt: 2 }}
+              />
+            </Box>
+          )}
+
+          {dialogType === 'supplier' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название компании"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Контактное лицо"
+                value={formData.contact || ''}
+                onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Телефон"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={formData.email || ''}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+            </Box>
+          )}
+
+          {dialogType === 'project' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название проекта"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Код проекта"
+                value={formData.code || ''}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <FormControl fullWidth>
+                <InputLabel>Статус</InputLabel>
+                <Select
+                  value={formData.status || 'active'}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  label="Статус"
+                >
+                  <MenuItem value="active">Активный</MenuItem>
+                  <MenuItem value="completed">Завершен</MenuItem>
+                  <MenuItem value="on-hold">Приостановлен</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          )}
+
+          {dialogType === 'location' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название местоположения"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Родительское местоположение"
+                value={formData.parent || ''}
+                onChange={(e) => setFormData({ ...formData, parent: e.target.value })}
+                placeholder="Например: Офис ПРМ"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Описание"
+                multiline
+                rows={3}
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </Box>
+          )}
+          {dialogType === 'shelf' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="Название стеллажа"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>Отмена</Button>
+          <Button onClick={handleSave} variant="contained">
+            {editingItem ? 'Сохранить' : 'Добавить'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default Administration;
