@@ -92,6 +92,10 @@ export function getEquipmentById(id: string): Equipment | undefined {
   return store.get().find(item => item.id === id);
 }
 
+export function getEquipmentByInventoryNumber(inventoryNumber: string): Equipment | undefined {
+  return store.get().find(item => item.inventoryNumber === inventoryNumber);
+}
+
 export function addEquipment(equipment: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt'>): Equipment {
   const newEquipment: Equipment = {
     ...equipment,
@@ -109,6 +113,24 @@ export function addEquipment(equipment: Omit<Equipment, 'id' | 'createdAt' | 'up
 export function updateEquipment(id: string, updates: Partial<Equipment>): Equipment | null {
   const currentEquipment = store.get();
   const index = currentEquipment.findIndex(item => item.id === id);
+  
+  if (index === -1) return null;
+  
+  const updatedEquipment: Equipment = {
+    ...currentEquipment[index],
+    ...updates,
+    updatedAt: new Date(),
+  };
+  
+  currentEquipment[index] = updatedEquipment;
+  store.set(currentEquipment);
+  
+  return updatedEquipment;
+}
+
+export function updateEquipmentByInventoryNumber(inventoryNumber: string, updates: Partial<Equipment>): Equipment | null {
+  const currentEquipment = store.get();
+  const index = currentEquipment.findIndex(item => item.inventoryNumber === inventoryNumber);
   
   if (index === -1) return null;
   

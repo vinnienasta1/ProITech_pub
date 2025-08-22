@@ -599,7 +599,7 @@ const EquipmentList = () => {
                            <Typography
                              variant="body1"
                              sx={{ fontWeight: 500, cursor: 'pointer', '&:hover': { color: 'primary.main', textDecoration: 'underline' } }}
-                             onClick={() => navigate(`/equipment/${equipment.id}`)}
+                             onClick={() => navigate(`/equipment/${equipment.inventoryNumber}`)}
                            >
                              {equipment.name}
                            </Typography>
@@ -631,7 +631,7 @@ const EquipmentList = () => {
                         <Tooltip title="Редактировать">
                           <IconButton
                             size="small"
-                            onClick={() => navigate(`/equipment/edit/${equipment.id}`)}
+                            onClick={() => navigate(`/equipment/edit/${equipment.inventoryNumber}`)}
                             color="primary"
                           >
                             <EditIcon />
@@ -641,7 +641,7 @@ const EquipmentList = () => {
                           <IconButton 
                             size="small" 
                             color="info"
-                            onClick={() => navigate(`/equipment/${equipment.id}`)}
+                            onClick={() => navigate(`/equipment/${equipment.inventoryNumber}`)}
                           >
                             <ViewIcon />
                           </IconButton>

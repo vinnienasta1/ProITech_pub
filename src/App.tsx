@@ -93,8 +93,8 @@ function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/equipment" element={<EquipmentList />} />
                 <Route path="/equipment/new" element={<EquipmentForm />} />
-                <Route path="/equipment/edit/:id" element={<EquipmentForm />} />
-                <Route path="/equipment/:id" element={<EquipmentDetail />} />
+                <Route path="/equipment/edit/:inventoryNumber" element={<EquipmentForm />} />
+                <Route path="/equipment/:inventoryNumber" element={<EquipmentDetail />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/printers" element={<Printers />} />
                 <Route path="/administration" element={<Administration />} />

@@ -14,7 +14,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { useNotifications } from '../contexts/NotificationContext';
-import { addEquipment, updateEquipment, getEquipmentById } from '../storage/equipmentStorage';
+import { addEquipment, updateEquipmentByInventoryNumber, getEquipment } from '../storage/equipmentStorage';
 import { getEntities } from '../storage/entitiesStorage';
 
 interface EquipmentFormData {
@@ -40,9 +40,9 @@ interface EquipmentFormData {
 
 const EquipmentForm = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { inventoryNumber } = useParams();
   const { addNotification } = useNotifications();
-  const isEditing = Boolean(id);
+  const isEditing = Boolean(inventoryNumber);
 
   // Получаем данные из хранилища
   const entities = getEntities();
@@ -71,8 +71,9 @@ const EquipmentForm = () => {
   const [errors, setErrors] = useState<Partial<EquipmentFormData>>({});
 
   useEffect(() => {
-    if (isEditing && id) {
-      const equipment = getEquipmentById(id);
+    if (isEditing && inventoryNumber) {
+      const allEquipment = getEquipment();
+      const equipment = allEquipment.find(eq => eq.inventoryNumber === inventoryNumber);
       if (equipment) {
         setFormData({
           name: equipment.name,
@@ -96,7 +97,7 @@ const EquipmentForm = () => {
         });
       }
     }
-  }, [id, isEditing]);
+  }, [inventoryNumber, isEditing]);
 
   const handleInputChange = (field: keyof EquipmentFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -151,8 +152,8 @@ const EquipmentForm = () => {
         warrantyMonths: parseInt(formData.warrantyMonths) || 0,
       };
 
-      if (isEditing && id) {
-        const updated = updateEquipment(id, equipmentData);
+      if (isEditing && inventoryNumber) {
+        const updated = updateEquipmentByInventoryNumber(inventoryNumber, equipmentData);
         if (updated) {
           addNotification({
             type: 'success',

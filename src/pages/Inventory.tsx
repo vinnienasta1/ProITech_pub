@@ -748,7 +748,7 @@ const Inventory = () => {
                                 textDecoration: 'none'
                               }
                             }}
-                            onClick={() => navigate(`/equipment/${row.item!.id}`)}
+                            onClick={() => navigate(`/equipment/${row.item!.inventoryNumber}`)}
                           >
                             {row.item.name}
                   </Typography>

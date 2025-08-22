@@ -42,6 +42,7 @@ import {
   Assignment as ProjectIcon,
   Storage as RackIcon,
   Palette as PaletteIcon,
+  VpnKey as LdapIcon,
 } from '@mui/icons-material';
 import { getStatuses, saveStatuses, StatusItem } from '../storage/statusStorage';
 import { getEntities, saveEntities } from '../storage/entitiesStorage';
@@ -259,6 +260,7 @@ const Administration = () => {
           <Tab label="Проекты" icon={<ProjectIcon />} iconPosition="start" />
           <Tab label="Местоположения" icon={<LocationIcon />} iconPosition="start" />
           <Tab label="Стеллажи" icon={<RackIcon />} iconPosition="start" />
+          <Tab label="LDAP" icon={<LdapIcon />} iconPosition="start" />
           <Tab label="Внешний вид" icon={<PaletteIcon />} iconPosition="start" />
         </Tabs>
 
@@ -521,8 +523,98 @@ const Administration = () => {
           </List>
         </TabPanel>
 
-        {/* TabPanel for Appearance */}
+        {/* TabPanel for LDAP */}
         <TabPanel value={tabValue} index={7}>
+          <Typography variant="h6" sx={{ mb: 3 }}>Настройки LDAP</Typography>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* LDAP Connection */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Подключение к контроллеру домена</Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <TextField
+                  fullWidth
+                  label="LDAP Server URL"
+                  placeholder="ldap://dc.example.com:389"
+                  helperText="Адрес и порт LDAP сервера"
+                />
+                <TextField
+                  fullWidth
+                  label="Base DN"
+                  placeholder="DC=example,DC=com"
+                  helperText="Базовый DN для поиска пользователей"
+                />
+                <TextField
+                  fullWidth
+                  label="Bind DN"
+                  placeholder="CN=service_account,OU=ServiceAccounts,DC=example,DC=com"
+                  helperText="DN пользователя для подключения к LDAP"
+                />
+                <TextField
+                  fullWidth
+                  label="Password"
+                  type="password"
+                  placeholder="Пароль для подключения"
+                  helperText="Пароль от сервисного аккаунта"
+                />
+                <Button variant="contained" color="primary">
+                  Проверить подключение
+                </Button>
+              </Box>
+            </Paper>
+
+            {/* LDAP Import */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Импорт пользователей</Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <TextField
+                  fullWidth
+                  label="Фильтр поиска"
+                  placeholder="(&(objectClass=user)(objectCategory=person))"
+                  helperText="LDAP фильтр для поиска пользователей"
+                />
+                <TextField
+                  fullWidth
+                  label="Атрибуты для импорта"
+                  placeholder="cn,mail,department,title"
+                  helperText="Список атрибутов через запятую"
+                />
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button variant="contained" color="primary">
+                    Импортировать пользователей
+                  </Button>
+                  <Button variant="outlined">
+                    Предварительный просмотр
+                  </Button>
+                </Box>
+              </Box>
+            </Paper>
+
+            {/* LDAP Sync */}
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Автоматическая синхронизация</Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <FormControlLabel
+                  control={<Switch />}
+                  label="Включить автоматическую синхронизацию"
+                />
+                <TextField
+                  fullWidth
+                  label="Интервал синхронизации (минуты)"
+                  type="number"
+                  defaultValue="60"
+                  helperText="Как часто обновлять список пользователей"
+                />
+                <Button variant="outlined" color="secondary">
+                  Синхронизировать сейчас
+                </Button>
+              </Box>
+            </Paper>
+          </Box>
+        </TabPanel>
+
+        {/* TabPanel for Appearance */}
+        <TabPanel value={tabValue} index={8}>
           <Typography variant="h6" sx={{ mb: 3 }}>Настройки внешнего вида</Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

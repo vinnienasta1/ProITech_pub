@@ -23,7 +23,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AutocompleteSelect from '../components/AutocompleteSelect';
 import { getEntities } from '../storage/entitiesStorage';
 import { getStatuses } from '../storage/statusStorage';
-import { getEquipmentById, updateEquipment } from '../storage/equipmentStorage';
+import { getEquipment, updateEquipmentByInventoryNumber } from '../storage/equipmentStorage';
 import JsBarcode from 'jsbarcode';
 
 interface Equipment {
@@ -138,7 +138,7 @@ const mockHistory: HistoryItem[] = [
 
 const EquipmentDetail = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { inventoryNumber } = useParams();
   
   const [equipment, setEquipment] = useState<Equipment>(mockEquipment);
   const [history] = useState<HistoryItem[]>(mockHistory);
@@ -174,8 +174,11 @@ const EquipmentDetail = () => {
   const rackOptions = useMemo(() => entities.shelves.map(s => s.name), [entities.shelves]);
 
   useEffect(() => {
-    if (id) {
-      const loadedEquipment = getEquipmentById(id);
+    if (inventoryNumber) {
+      // Ищем оборудование по инвентарному номеру
+      const allEquipment = getEquipment();
+      const loadedEquipment = allEquipment.find((eq: Equipment) => eq.inventoryNumber === inventoryNumber);
+      
       if (loadedEquipment) {
         setEquipment(loadedEquipment);
         setEditData({ ...loadedEquipment }); // Создаем копию объекта
@@ -187,7 +190,7 @@ const EquipmentDetail = () => {
       setEquipment(mockEquipment);
       setEditData({ ...mockEquipment });
     }
-  }, [id]);
+  }, [inventoryNumber]);
 
 
 
@@ -198,12 +201,12 @@ const EquipmentDetail = () => {
   }, []);
 
   const handleSave = useCallback(() => {
-    if (!id) {
+    if (!inventoryNumber) {
       return;
     }
     
     // Сохраняем изменения в базу данных
-    const updatedEquipment = updateEquipment(id, editData);
+    const updatedEquipment = updateEquipmentByInventoryNumber(inventoryNumber, editData);
     
     if (updatedEquipment) {
       // Обновляем локальное состояние
@@ -228,7 +231,7 @@ const EquipmentDetail = () => {
         });
       }
     }
-  }, [editData, id]);
+  }, [editData, inventoryNumber]);
 
   const isRackFieldEnabled = (editData.location?.toLowerCase().includes('склад') || equipment.location?.toLowerCase().includes('склад'));
 
