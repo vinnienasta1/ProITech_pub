@@ -6,6 +6,8 @@ interface ActionLogContextType {
   addAction: (action: Omit<ActionLogItem, 'id' | 'timestamp'>) => void;
   undoAction: (action: ActionLogItem) => void;
   clearHistory: () => void;
+  registerUndoHandler: (entityType: string, handler: (action: ActionLogItem) => boolean) => void;
+  unregisterUndoHandler: (entityType: string) => void;
 }
 
 const ActionLogContext = createContext<ActionLogContextType | undefined>(undefined);
@@ -41,6 +43,9 @@ export const ActionLogProvider: React.FC<ActionLogProviderProps> = ({ children }
     return [];
   });
 
+  // Регистрируем обработчики отмены для разных типов сущностей
+  const [undoHandlers, setUndoHandlers] = useState<Map<string, (action: ActionLogItem) => boolean>>(new Map());
+
   // Сохраняем действия в localStorage при каждом изменении
   React.useEffect(() => {
     try {
@@ -62,30 +67,67 @@ export const ActionLogProvider: React.FC<ActionLogProviderProps> = ({ children }
 
   const undoAction = useCallback((action: ActionLogItem) => {
     try {
-      if (action.oldData && action.newData) {
-        // Восстанавливаем старые данные
-        if (action.entityType === 'Оборудование') {
-          const { updateEquipmentByInventoryNumber } = require('../storage/equipmentStorage');
+      // Проверяем, есть ли зарегистрированный обработчик для данного типа сущности
+      const handler = undoHandlers.get(action.entityType);
+      if (handler) {
+        // Вызываем зарегистрированный обработчик
+        const success = handler(action);
+        if (success) {
+          // Показываем уведомление об успешной отмене
+          if (window.notificationSystem) {
+            window.notificationSystem.addNotification({
+              type: 'success',
+              title: 'Отменено',
+              message: `Действие "${action.description}" успешно отменено`,
+            });
+          }
           
-          // Проверяем, что oldData содержит валидные данные
-          if (action.oldData.inventoryNumber) {
-            const restored = updateEquipmentByInventoryNumber(action.oldData.inventoryNumber, action.oldData);
-            if (restored) {
-              // Показываем уведомление об успешной отмене
-              if (window.notificationSystem) {
-                window.notificationSystem.addNotification({
-                  type: 'success',
-                  title: 'Отменено',
-                  message: `Действие "${action.description}" успешно отменено`,
-                });
-              }
+          // Удаляем действие из лога
+          setActions(prev => prev.filter(a => a.id !== action.id));
+          return;
+        }
+      }
+
+      // Если нет зарегистрированного обработчика, используем стандартную логику
+      switch (action.type) {
+        case 'update':
+          // Для обновления - восстанавливаем старые данные
+          if (action.oldData && action.newData) {
+            if (action.entityType === 'Оборудование') {
+              const { updateEquipmentByInventoryNumber } = require('../storage/equipmentStorage');
               
-              // Удаляем действие из лога только после успешной отмены
-              setActions(prev => prev.filter(a => a.id !== action.id));
-              return;
+              // Проверяем, что oldData содержит валидные данные
+              if (action.oldData.inventoryNumber) {
+                const restored = updateEquipmentByInventoryNumber(action.oldData.inventoryNumber, action.oldData);
+                if (restored) {
+                  // Показываем уведомление об успешной отмене
+                  if (window.notificationSystem) {
+                    window.notificationSystem.addNotification({
+                      type: 'success',
+                      title: 'Отменено',
+                      message: `Действие "${action.description}" успешно отменено`,
+                    });
+                  }
+                  
+                  // Удаляем действие из лога только после успешной отмены
+                  setActions(prev => prev.filter(a => a.id !== action.id));
+                  return;
+                }
+              }
             }
           }
-        }
+          break;
+          
+        default:
+          // Для других типов действий показываем сообщение о необходимости ручной отмены
+          if (window.notificationSystem) {
+            window.notificationSystem.addNotification({
+              type: 'info',
+              title: 'Отмена действия',
+              message: `Для отмены действия "${action.description}" перейдите на соответствующую страницу и выполните отмену вручную`,
+            });
+          }
+          return;
       }
       
       // Если не удалось отменить, показываем ошибку
@@ -106,10 +148,22 @@ export const ActionLogProvider: React.FC<ActionLogProviderProps> = ({ children }
         });
       }
     }
-  }, []);
+  }, [undoHandlers]);
 
   const clearHistory = useCallback(() => {
     setActions([]);
+  }, []);
+
+  const registerUndoHandler = useCallback((entityType: string, handler: (action: ActionLogItem) => boolean) => {
+    setUndoHandlers(prev => new Map(prev).set(entityType, handler));
+  }, []);
+
+  const unregisterUndoHandler = useCallback((entityType: string) => {
+    setUndoHandlers(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(entityType);
+      return newMap;
+    });
   }, []);
 
   const value: ActionLogContextType = {
@@ -117,6 +171,8 @@ export const ActionLogProvider: React.FC<ActionLogProviderProps> = ({ children }
     addAction,
     undoAction,
     clearHistory,
+    registerUndoHandler,
+    unregisterUndoHandler,
   };
 
   return (

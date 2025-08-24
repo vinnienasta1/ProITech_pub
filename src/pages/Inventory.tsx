@@ -103,7 +103,7 @@ interface BufferRow {
 
 const Inventory: React.FC = () => {
   const navigate = useNavigate();
-  const { addAction } = useActionLog();
+  const { addAction, registerUndoHandler, unregisterUndoHandler } = useActionLog();
   
   const [inputValue, setInputValue] = useState('');
   const [rows, setRows] = useState<BufferRow[]>([]);
@@ -158,6 +158,9 @@ const Inventory: React.FC = () => {
   // Состояние для Drag and Drop
   const [isDragging, setIsDragging] = useState(false);
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+
+  // Состояние для принудительного обновления цветов статусов
+  const [statusColorsKey, setStatusColorsKey] = useState(0);
 
   // Функции для Drag and Drop
   const handleDragStart = (e: React.DragEvent, columnKey: string) => {
@@ -218,7 +221,20 @@ const Inventory: React.FC = () => {
       if (color === '#9c27b0') return 'secondary';
     }
     return 'default';
-  }, [statuses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statuses, statusColorsKey]); // Добавляем зависимость от statusColorsKey
+
+  // useEffect для принудительного обновления цветов статусов
+  useEffect(() => {
+    const checkStatusUpdates = () => {
+      setStatusColorsKey(prev => prev + 1);
+    };
+
+    // Проверяем обновления каждые 5 секунд
+    const interval = setInterval(checkStatusUpdates, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   /**
    * 🚨 КРИТИЧЕСКИЙ useEffect: Загрузка буфера
@@ -729,6 +745,49 @@ const Inventory: React.FC = () => {
       printWindow.document.close();
     }
   }, []);
+
+  // useEffect для регистрации функций отмены в ActionLogContext
+  useEffect(() => {
+    // Регистрируем обработчик отмены для инвентаризации
+    registerUndoHandler('Инвентаризация', (action: any) => {
+      try {
+        switch (action.type) {
+          case 'import':
+            // Отмена импорта - удаляем элемент из буфера
+            if (action.newData && action.newData.inventoryNumber) {
+              setRows(prev => prev.filter(row => 
+                !row.item || row.item.inventoryNumber !== action.newData.inventoryNumber
+              ));
+              return true; // Успешно отменено
+            }
+            break;
+            
+          case 'delete':
+            // Отмена удаления - восстанавливаем элемент в буфере
+            if (action.oldData) {
+              const newRow: BufferRow = {
+                id: Date.now().toString(),
+                serial: action.oldData.inventoryNumber,
+                status: 'found',
+                item: action.oldData,
+              };
+              setRows(prev => [...prev, newRow]);
+              return true; // Успешно отменено
+            }
+            break;
+        }
+        return false; // Не удалось отменить
+      } catch (error) {
+        console.error('Ошибка при отмене действия инвентаризации:', error);
+        return false;
+      }
+    });
+
+    // Отменяем регистрацию при размонтировании
+    return () => {
+      unregisterUndoHandler('Инвентаризация');
+    };
+  }, [registerUndoHandler, unregisterUndoHandler]);
 
   return (
     <Box sx={{ p: 3, minHeight: '100vh', backgroundColor: 'background.default' }}>

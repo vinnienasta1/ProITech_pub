@@ -31,17 +31,34 @@ export function saveStatuses(statuses: StatusItem[]): void {
   } catch {}
 }
 
-export function updateStatus(oldName: string, newName: string): void {
+export function updateStatus(oldName: string, newName: string, newColor?: string, newDescription?: string): void {
   try {
     const statuses = getStatuses();
     const statusIndex = statuses.findIndex(s => s.name === oldName);
     
     if (statusIndex !== -1) {
-      // Сохраняем цвет и описание старого статуса
+      // Сохраняем цвет и описание старого статуса, если новые не переданы
       const oldStatus = statuses[statusIndex];
       statuses[statusIndex] = {
         ...oldStatus,
-        name: newName
+        name: newName,
+        color: newColor || oldStatus.color,
+        description: newDescription || oldStatus.description
+      };
+      saveStatuses(statuses);
+    }
+  } catch {}
+}
+
+export function updateStatusColor(statusName: string, newColor: string): void {
+  try {
+    const statuses = getStatuses();
+    const statusIndex = statuses.findIndex(s => s.name === statusName);
+    
+    if (statusIndex !== -1) {
+      statuses[statusIndex] = {
+        ...statuses[statusIndex],
+        color: newColor
       };
       saveStatuses(statuses);
     }

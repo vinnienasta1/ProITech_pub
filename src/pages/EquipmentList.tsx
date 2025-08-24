@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -29,7 +29,7 @@ import {
   MoreVert as MoreIcon,
   DragIndicator as DragIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useNotifications } from '../contexts/NotificationContext';
 import BulkOperations from '../components/BulkOperations';
 import ExportData, { ExportOptions } from '../components/ExportData';
@@ -72,6 +72,7 @@ interface Equipment {
 
 const EquipmentList = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { addNotification } = useNotifications();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -369,33 +370,45 @@ const EquipmentList = () => {
     return result;
   });
 
-  const getStatusColor = (status: string) => {
-    // Получаем цвета статусов из хранилища
+  // Состояние для принудительного обновления цветов статусов
+  const [statusColorsKey, setStatusColorsKey] = useState(0);
+
+  // Получаем цвета статусов с использованием useMemo для корректного обновления
+  const statusColors = useMemo(() => {
     const { getStatuses } = require('../storage/statusStorage');
     const statuses = getStatuses();
-    const statusItem = statuses.find((s: any) => s.name === status);
+    const colorMap: { [key: string]: string } = {};
     
-    if (statusItem) {
+    statuses.forEach((s: any) => {
       // Преобразуем hex цвет в MUI цвет
-      const color = statusItem.color;
-      if (color === '#4caf50') return 'success';
-      if (color === '#ff9800') return 'warning';
-      if (color === '#f44336') return 'error';
-      if (color === '#2196f3') return 'info';
-      if (color === '#9c27b0') return 'secondary';
-    }
+      const color = s.color;
+      if (color === '#4caf50') colorMap[s.name] = 'success';
+      else if (color === '#ff9800') colorMap[s.name] = 'warning';
+      else if (color === '#f44336') colorMap[s.name] = 'error';
+      else if (color === '#2196f3') colorMap[s.name] = 'info';
+      else if (color === '#9c27b0') colorMap[s.name] = 'secondary';
+      else colorMap[s.name] = 'default';
+    });
     
-    // Fallback на старые значения
-    switch (status) {
-      case 'Активно':
-        return 'success';
-      case 'Ремонт':
-        return 'warning';
-      case 'Списано':
-        return 'error';
-      default:
-        return 'default';
-    }
+    return colorMap;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusColorsKey]); // Зависимость от statusColorsKey для обновления при изменении статусов
+
+  // Отдельный useEffect для отслеживания изменений в statusStorage
+  useEffect(() => {
+    const checkStatusUpdates = () => {
+      // Принудительно обновляем цвета статусов
+      setStatusColorsKey(prev => prev + 1);
+    };
+
+    // Проверяем обновления каждые 5 секунд
+    const interval = setInterval(checkStatusUpdates, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const getStatusColor = (status: string) => {
+    return statusColors[status] || 'default';
   };
 
   const handleSelectAll = () => {
@@ -622,6 +635,64 @@ const EquipmentList = () => {
       message: `Поле "${bulkActionField}" для ${selectedItems.length} элементов успешно обновлено.`,
     });
   };
+
+  // Обработка фильтров из URL при загрузке страницы
+  useEffect(() => {
+    const urlFilters: Array<{ field: string; op: 'eq' | 'neq' | 'contains' | 'ncontains' | 'gt' | 'gte' | 'lt' | 'lte'; value: string; operator?: 'AND' | 'OR' }> = [];
+    
+    // Парсим параметры URL для фильтров
+    let index = 0;
+    while (searchParams.has(`filter${index}.field`)) {
+      const field = searchParams.get(`filter${index}.field`);
+      const operator = searchParams.get(`filter${index}.operator`);
+      const value = searchParams.get(`filter${index}.value`);
+      const operatorBetween = searchParams.get(`filter${index}.operatorBetween`);
+      
+      if (field && operator && value) {
+        // Преобразуем операторы из дашборда в операторы EquipmentList
+        let op: 'eq' | 'neq' | 'contains' | 'ncontains' | 'gt' | 'gte' | 'lt' | 'lte' = 'contains';
+        switch (operator) {
+          case 'equals':
+            op = 'eq';
+            break;
+          case 'not_equals':
+            op = 'neq';
+            break;
+          case 'contains':
+            op = 'contains';
+            break;
+          case 'starts_with':
+            op = 'contains';
+            break;
+          case 'ends_with':
+            op = 'contains';
+            break;
+          case 'greater_than':
+            op = 'gt';
+            break;
+          case 'less_than':
+            op = 'lt';
+            break;
+          default:
+            op = 'contains';
+        }
+        
+        urlFilters.push({
+          field,
+          op,
+          value,
+          operator: operatorBetween as 'AND' | 'OR' | undefined
+        });
+      }
+      index++;
+    }
+    
+    // Если есть фильтры из URL, применяем их
+    if (urlFilters.length > 0) {
+      setConditions(urlFilters);
+      // Фильтры применяются автоматически, не открываем диалог
+    }
+  }, [searchParams]);
 
   return (
     <Box>
