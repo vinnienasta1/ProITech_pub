@@ -27,27 +27,11 @@ const EquipmentForm: React.FC = () => {
   
   const isEditing = Boolean(inventoryNumber);
   const [equipmentData, setEquipmentData] = useState<Partial<Equipment>>({
-    name: '',
-    type: '',
-    department: '',
-    status: '',
-    user: '',
-    location: '',
-    manufacturer: '',
-    model: '',
-    inventoryNumber: '',
-    serialNumber: '',
-    comment: '',
+    name: '', type: '', department: '', status: '', user: '', location: '',
+    manufacturer: '', model: '', inventoryNumber: '', serialNumber: '', comment: '',
     purchaseDate: '',
-    warrantyDate: '',
-    supplier: '',
-    invoiceNumber: '',
-    contractNumber: '',
-    cost: 0,
-    project: '',
-    warrantyMonths: 0,
-    rack: '',
-    budget: 0,
+    supplier: '', invoiceNumber: '', contractNumber: '', cost: 0, project: '',
+    warrantyMonths: 0, rack: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitSuccess] = useState(false);
@@ -328,12 +312,12 @@ const EquipmentForm: React.FC = () => {
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
-                  label="Гарантия до"
-                  type="date"
-                  value={equipmentData.warrantyDate || ''}
-                  onChange={(e) => handleInputChange('warrantyDate', e.target.value)}
-                  margin="normal"
-                  InputLabelProps={{ shrink: true }}
+                  label="Гарантия (месяцев)"
+                  type="number"
+                  value={equipmentData.warrantyMonths || ''}
+                  onChange={(e) => handleInputChange('warrantyMonths', e.target.value)}
+                  error={!!errors.warrantyMonths}
+                  helperText={errors.warrantyMonths}
                 />
               </Box>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
@@ -379,7 +363,8 @@ const EquipmentForm: React.FC = () => {
                   label="Проект"
                   value={equipmentData.project || ''}
                   onChange={(e) => handleInputChange('project', e.target.value)}
-                  margin="normal"
+                  error={!!errors.project}
+                  helperText={errors.project}
                 />
               </Box>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
@@ -389,7 +374,8 @@ const EquipmentForm: React.FC = () => {
                   type="number"
                   value={equipmentData.warrantyMonths || ''}
                   onChange={(e) => handleInputChange('warrantyMonths', e.target.value)}
-                  margin="normal"
+                  error={!!errors.warrantyMonths}
+                  helperText={errors.warrantyMonths}
                 />
               </Box>
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
@@ -404,11 +390,11 @@ const EquipmentForm: React.FC = () => {
               <Box sx={{ flex: '1 1 300px', minWidth: 0 }}>
                 <TextField
                   fullWidth
-                  label="Бюджет"
-                  type="number"
-                  value={equipmentData.budget || ''}
-                  onChange={(e) => handleInputChange('budget', e.target.value)}
-                  margin="normal"
+                  label="Проект"
+                  value={equipmentData.project || ''}
+                  onChange={(e) => handleInputChange('project', e.target.value)}
+                  error={!!errors.project}
+                  helperText={errors.project}
                 />
               </Box>
               <Box sx={{ flex: '1 1 100%', minWidth: 0 }}>

@@ -1,3 +1,28 @@
+/**
+ * КРИТИЧЕСКИ ВАЖНАЯ ОБЛАСТЬ: НАСТРОЙКИ СТОЛБЦОВ ОБОРУДОВАНИЯ
+ * 
+ * ПРИНЦИПЫ РАБОТЫ:
+ * 1. EquipmentColumnKey должен точно соответствовать интерфейсу Equipment
+ * 2. Все названия столбцов должны быть на русском языке
+ * 3. getDefaultColumnPrefs должен содержать все возможные столбцы
+ * 4. Ключ localStorage должен быть уникальным для версии
+ * 
+ * КРИТИЧЕСКИЕ ФУНКЦИИ:
+ * - getDefaultColumnPrefs - настройки по умолчанию
+ * - getColumnPrefs - получение настроек из localStorage
+ * - saveColumnPrefs - сохранение настроек в localStorage
+ * 
+ * ТРЕБОВАНИЯ К ТЕСТИРОВАНИЮ:
+ * 1. Проверить, что все поля Equipment присутствуют в EquipmentColumnKey
+ * 2. Проверить, что настройки сохраняются и загружаются корректно
+ * 3. Проверить, что при изменении EquipmentColumnKey настройки сбрасываются
+ * 
+ * ЗАПРЕЩЕНО ИЗМЕНЯТЬ:
+ * - EquipmentColumnKey без обновления всех связанных файлов
+ * - getDefaultColumnPrefs без тщательного тестирования
+ * - Ключ localStorage без веской причины
+ */
+
 export type EquipmentColumnKey =
   | 'invNumber'
   | 'type'
@@ -15,14 +40,16 @@ export type EquipmentColumnKey =
   | 'project'
   | 'user'
   | 'rack'
-  | 'comment';
+  | 'comment'
+  | 'invoiceNumber'
+  | 'contractNumber';
 
 export interface ColumnPref {
   key: EquipmentColumnKey;
   visible: boolean;
 }
 
-const STORAGE_KEY = 'equipment_columns_v1';
+const STORAGE_KEY = 'equipment_columns_v2';
 
 export function getDefaultColumnPrefs(): ColumnPref[] {
   // По умолчанию показываем ключевые 8 колонок, остальные доступны в настройках
@@ -44,6 +71,8 @@ export function getDefaultColumnPrefs(): ColumnPref[] {
     { key: 'user', visible: false },
     { key: 'rack', visible: false },
     { key: 'comment', visible: false },
+    { key: 'invoiceNumber', visible: false },
+    { key: 'contractNumber', visible: false },
   ];
   return defaults;
 }

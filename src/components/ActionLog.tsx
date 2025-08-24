@@ -37,6 +37,7 @@ export interface ActionLogItem {
   oldData?: any;
   newData?: any;
   canUndo: boolean;
+  user?: string; // Кто внес изменения
 }
 
 interface ActionLogProps {

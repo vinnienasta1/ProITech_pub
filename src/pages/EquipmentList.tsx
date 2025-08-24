@@ -356,11 +356,11 @@ const EquipmentList = () => {
           console.log(`Обновление местоположения для ${item.id} на ${operation.value}`);
         });
              } else if (operation.type === 'type' && operation.value) {
-         selectedItems.forEach(item => {
+        selectedItems.forEach(item => {
            // Здесь будет обновление в хранилище
            console.log(`Обновление типа для ${item.id} на ${operation.value}`);
-         });
-       }
+        });
+      }
       
       // Принудительно обновляем компонент
       setSelectedItems([]);
@@ -684,10 +684,10 @@ const EquipmentList = () => {
                 {/* Условия для текстовых полей */}
                 {['name', 'type', 'location', 'status', 'manufacturer', 'model', 'serialNumber', 'department', 'rack', 'user', 'supplier', 'project', 'invoiceNumber', 'contractNumber', 'comment'].includes(c.field) && (
                   <>
-                    <option value="eq">Равно</option>
-                    <option value="neq">Не равно</option>
-                    <option value="contains">Содержит</option>
-                    <option value="ncontains">Не содержит</option>
+                <option value="eq">Равно</option>
+                <option value="neq">Не равно</option>
+                <option value="contains">Содержит</option>
+                <option value="ncontains">Не содержит</option>
                   </>
                 )}
                 
@@ -813,16 +813,16 @@ const EquipmentList = () => {
         onClose={() => setFilterAnchorEl(null)}
       >
                  {types.map((type) => (
-           <MenuItem
+          <MenuItem
              key={type}
-             onClick={() => {
+            onClick={() => {
                setSelectedType(type);
-               setFilterAnchorEl(null);
-             }}
-           >
+              setFilterAnchorEl(null);
+            }}
+          >
              {type}
-           </MenuItem>
-         ))}
+          </MenuItem>
+        ))}
       </Menu>
 
       {/* Таблица оборудования */}
@@ -905,13 +905,13 @@ const EquipmentList = () => {
                           <Chip label={equipment.type} size="small" variant="outlined" color="primary" />
                         ) : ''}
                                                  {key === 'name' && equipment.name ? (
-                           <Typography
-                             variant="body1"
-                             sx={{ fontWeight: 500, cursor: 'pointer', '&:hover': { color: 'primary.main', textDecoration: 'underline' } }}
+                            <Typography
+                              variant="body1"
+                              sx={{ fontWeight: 500, cursor: 'pointer', '&:hover': { color: 'primary.main', textDecoration: 'underline' } }}
                              onClick={() => navigate(`/equipment/${equipment.inventoryNumber}`)}
-                           >
-                             {equipment.name}
-                           </Typography>
+                            >
+                              {equipment.name}
+                            </Typography>
                          ) : ''}
                         {key === 'department' && equipment.department}
                         

@@ -21,7 +21,6 @@ export interface Equipment {
   project: string;
   warrantyMonths: number;
   rack?: string;
-  budget?: number;
   description?: string;
   tags?: string[];
   ipAddress?: string;

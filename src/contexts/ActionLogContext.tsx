@@ -30,6 +30,7 @@ export const ActionLogProvider: React.FC<ActionLogProviderProps> = ({ children }
       ...action,
       id: Date.now().toString(),
       timestamp: new Date(),
+      user: action.user || 'Система', // По умолчанию "Система" если пользователь не указан
     };
     setActions(prev => [newAction, ...prev]);
   }, []);

@@ -19,7 +19,6 @@ export interface Equipment {
   project: string;
   warrantyMonths: number;
   rack?: string;
-  budget?: number;
   description?: string;
   tags?: string[];
   ipAddress?: string;
@@ -27,7 +26,14 @@ export interface Equipment {
   os?: string;
   lastMaintenance?: string;
   nextMaintenance?: string;
-  warrantyDate?: string;
+  maintenanceRecords?: Array<{
+    id: string;
+    date: string;
+    work: string;
+    ticketLink: string;
+    performedBy: string;
+    comment: string;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }
