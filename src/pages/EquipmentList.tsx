@@ -97,12 +97,89 @@ const EquipmentList = () => {
   const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
   const [columnPrefs, setColumnPrefs] = useState<ColumnPref[]>(getColumnPrefs());
   const [filtersDialogOpen, setFiltersDialogOpen] = useState(false);
-  const [joinOperator, setJoinOperator] = useState<'AND' | 'OR'>('AND');
-  const [conditions, setConditions] = useState<Array<{ field: string; op: 'eq' | 'neq' | 'contains' | 'ncontains'; value: string }>>([]);
+  const [conditions, setConditions] = useState<Array<{ field: string; op: 'eq' | 'neq' | 'contains' | 'ncontains' | 'gt' | 'gte' | 'lt' | 'lte'; value: string; operator?: 'AND' | 'OR' }>>([
+    { field: 'name', op: 'contains', value: '' }
+  ]);
   const [selectedStatus, setSelectedStatus] = useState<string>('Все');
   const [bulkActionField, setBulkActionField] = useState<string | null>(null);
   const [bulkActionOperation, setBulkActionOperation] = useState<string | null>(null);
   const [bulkActionValue, setBulkActionValue] = useState<string | null>(null);
+
+  // Функция для генерации описания примененных фильтров
+  const getFiltersDescription = () => {
+    const activeFilters = [];
+    
+    // Поиск по тексту
+    if (searchTerm.trim()) {
+      activeFilters.push(`поиск: "${searchTerm}"`);
+    }
+    
+    // Фильтр по типу
+    if (selectedType !== 'Все') {
+      activeFilters.push(`тип: "${selectedType}"`);
+    }
+    
+    // Фильтр по статусу
+    if (selectedStatus !== 'Все') {
+      activeFilters.push(`статус: "${selectedStatus}"`);
+    }
+    
+    // Расширенные фильтры
+    const activeConditions = conditions.filter(c => c.value && c.value.trim() !== '');
+    if (activeConditions.length > 0) {
+      const conditionDescriptions = activeConditions.map((condition, index) => {
+        const fieldNames: { [key: string]: string } = {
+          'inventoryNumber': 'инв. номер',
+          'name': 'название',
+          'type': 'тип',
+          'department': 'департамент',
+          'status': 'статус',
+          'location': 'местоположение',
+          'rack': 'стеллаж',
+          'user': 'пользователь',
+          'manufacturer': 'производитель',
+          'model': 'модель',
+          'serialNumber': 'серийный номер',
+          'cost': 'стоимость',
+          'supplier': 'поставщик',
+          'project': 'проект',
+          'invoiceNumber': 'номер счета',
+          'contractNumber': 'номер договора',
+          'purchaseDate': 'дата закупки',
+          'warrantyMonths': 'гарантия',
+          'comment': 'комментарий'
+        };
+        
+        const operatorNames: { [key: string]: string } = {
+          'eq': 'равно',
+          'neq': 'не равно',
+          'contains': 'содержит',
+          'ncontains': 'не содержит',
+          'gt': 'больше',
+          'gte': 'не менее',
+          'lt': 'меньше',
+          'lte': 'не более'
+        };
+        
+        const fieldName = fieldNames[condition.field] || condition.field;
+        const operatorName = operatorNames[condition.op] || condition.op;
+        
+        let description = `${fieldName} ${operatorName} "${condition.value}"`;
+        
+        // Добавляем логический оператор для не первого фильтра
+        if (index > 0 && condition.operator) {
+          const operatorText = condition.operator === 'AND' ? 'И' : 'ИЛИ';
+          description = `${operatorText} ${description}`;
+        }
+        
+        return description;
+      });
+      
+      activeFilters.push(conditionDescriptions.join(' И '));
+    }
+    
+    return activeFilters;
+  };
 
 
   const queryStatus = useMemo(() => {
@@ -131,7 +208,107 @@ const EquipmentList = () => {
     const matchesStatus = selectedStatus === 'Все' || equipment.status === selectedStatus;
          return matchesSearch && matchesType && matchesStatus;
   });
-  const filteredWithAdvanced = filteredEquipment;
+  
+  // Применяем расширенные фильтры
+  const filteredWithAdvanced = filteredEquipment.filter((equipment) => {
+    if (conditions.length === 0 || !conditions.some(c => c.value && c.value.trim() !== '')) {
+      return true;
+    }
+    
+    return conditions.every((condition, index) => {
+      if (!condition.value || condition.value.trim() === '') return true;
+      
+      const fieldValue = equipment[condition.field as keyof Equipment];
+      if (!fieldValue) return false;
+      
+      let matches = false;
+      
+      // Специальная обработка для разных типов полей
+      if (condition.field === 'purchaseDate') {
+        // Для дата полей
+        const fieldDate = new Date(String(fieldValue));
+        const conditionDate = new Date(condition.value);
+        
+        if (isNaN(fieldDate.getTime()) || isNaN(conditionDate.getTime())) return false;
+        
+        switch (condition.op) {
+          case 'eq':
+            matches = fieldDate.toDateString() === conditionDate.toDateString();
+            break;
+          case 'neq':
+            matches = fieldDate.toDateString() !== conditionDate.toDateString();
+            break;
+          case 'gte':
+            matches = fieldDate >= conditionDate;
+            break;
+          case 'lte':
+            matches = fieldDate <= conditionDate;
+            break;
+          default:
+            matches = true;
+        }
+      } else if (['cost', 'warrantyMonths'].includes(condition.field) || 
+                 (condition.field === 'inventoryNumber' && ['gt', 'gte', 'lt', 'lte'].includes(condition.op))) {
+        // Для числовых полей
+        const fieldNum = parseFloat(String(fieldValue));
+        const conditionNum = parseFloat(condition.value);
+        
+        if (isNaN(fieldNum) || isNaN(conditionNum)) return false;
+        
+        switch (condition.op) {
+          case 'eq':
+            matches = fieldNum === conditionNum;
+            break;
+          case 'neq':
+            matches = fieldNum !== conditionNum;
+            break;
+          case 'gt':
+            matches = fieldNum > conditionNum;
+            break;
+          case 'gte':
+            matches = fieldNum >= conditionNum;
+            break;
+          case 'lt':
+            matches = fieldNum < conditionNum;
+            break;
+          case 'lte':
+            matches = fieldNum <= conditionNum;
+            break;
+          default:
+            matches = true;
+        }
+      } else {
+        // Для текстовых полей
+        const fieldValueStr = String(fieldValue).toLowerCase();
+        const conditionValue = condition.value.toLowerCase();
+        
+        switch (condition.op) {
+          case 'eq':
+            matches = fieldValueStr === conditionValue;
+            break;
+          case 'neq':
+            matches = fieldValueStr !== conditionValue;
+            break;
+          case 'contains':
+            matches = fieldValueStr.includes(conditionValue);
+            break;
+          case 'ncontains':
+            matches = !fieldValueStr.includes(conditionValue);
+            break;
+          default:
+            matches = true;
+        }
+      }
+      
+      // Если это не первый фильтр, применяем логику И/ИЛИ
+      if (index > 0 && conditions[index - 1].operator === 'OR') {
+        // Для OR: если предыдущий фильтр не прошел, этот должен пройти
+        return matches;
+      }
+      
+      return matches;
+    });
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -411,8 +588,8 @@ const EquipmentList = () => {
                   key==='model'?'Модель':
                   key==='serialNumber'?'Серийный номер':
                   key==='purchaseDate'?'Дата покупки':
-                  key==='warrantyExpiry'?'Гарантия до':
-                  key==='budget'?'Бюджет':
+                  key==='warrantyMonths'?'Гарантия (мес.)':
+                  key==='cost'?'Стоимость':
                   key==='comment'?'Комментарий':
                   key==='supplier'?'Поставщик':
                   key==='project'?'Проект':'Пользователь'
@@ -426,18 +603,26 @@ const EquipmentList = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={filtersDialogOpen} onClose={() => setFiltersDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={filtersDialogOpen} onClose={() => setFiltersDialogOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>Расширенные фильтры</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
-            <Typography variant="body2">Объединение условий:</Typography>
-            <Button variant={joinOperator==='AND'?'contained':'outlined'} size="small" onClick={() => setJoinOperator('AND')}>И (AND)</Button>
-            <Button variant={joinOperator==='OR'?'contained':'outlined'} size="small" onClick={() => setJoinOperator('OR')}>ИЛИ (OR)</Button>
-            <Box sx={{ flexGrow: 1 }} />
-            <Button size="small" onClick={() => setConditions([])}>Сбросить</Button>
-          </Box>
           {conditions.map((c, idx) => (
-            <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
+              {/* Показываем условие И/ИЛИ для не первого фильтра */}
+              {idx > 0 && (
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Условие</InputLabel>
+                  <Select
+                    value={c.operator || 'AND'}
+                    onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, operator: e.target.value as 'AND' | 'OR'}:x))}
+                    label="Условие"
+                  >
+                    <MenuItem value="AND">И (AND)</MenuItem>
+                    <MenuItem value="OR">ИЛИ (OR)</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+              
               <TextField
                 select
                 size="small"
@@ -447,26 +632,103 @@ const EquipmentList = () => {
                 sx={{ minWidth: 180 }}
                 SelectProps={{ native: true }}
               >
-                                 {['name','type','location','status','manufacturer','model','serialNumber'].map(f => (
-                   <option value={f} key={f}>{
-                     f==='name'?'Название': f==='type'?'Тип': f==='location'?'Местоположение': f==='status'?'Статус': f==='manufacturer'?'Производитель': f==='model'?'Модель':'Серийный номер'
-                   }</option>
-                 ))}
+                {/* Основная информация */}
+                <optgroup label="Основная информация">
+                  <option value="inventoryNumber">Инвентарный номер</option>
+                  <option value="name">Название</option>
+                  <option value="type">Тип</option>
+                  <option value="department">Департамент</option>
+                  <option value="status">Статус</option>
+                  <option value="location">Местоположение</option>
+                  <option value="rack">Стеллаж</option>
+                  <option value="user">Пользователь</option>
+                </optgroup>
+                
+                {/* Техническая информация */}
+                <optgroup label="Техническая информация">
+                  <option value="manufacturer">Производитель</option>
+                  <option value="model">Модель</option>
+                  <option value="serialNumber">Серийный номер</option>
+                </optgroup>
+                
+                {/* Финансовая информация */}
+                <optgroup label="Финансовая информация">
+                  <option value="cost">Стоимость</option>
+                  <option value="supplier">Поставщик</option>
+                  <option value="project">Проект</option>
+                  <option value="invoiceNumber">Номер счета</option>
+                  <option value="contractNumber">Номер договора</option>
+                </optgroup>
+                
+                {/* Даты и гарантия */}
+                <optgroup label="Даты и гарантия">
+                  <option value="purchaseDate">Дата закупки</option>
+                  <option value="warrantyMonths">Гарантия (месяцев)</option>
+                </optgroup>
+                
+                {/* Дополнительно */}
+                <optgroup label="Дополнительно">
+                  <option value="comment">Комментарий</option>
+                </optgroup>
               </TextField>
+              
               <TextField
                 select
                 size="small"
                 label="Условие"
                 value={c.op}
-                onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, op: e.target.value as any}:x))}
-                sx={{ minWidth: 160 }}
+                onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, op: e.target.value as any, value: ''}:x))}
+                sx={{ minWidth: 180 }}
                 SelectProps={{ native: true }}
               >
-                <option value="eq">Равно</option>
-                <option value="neq">Не равно</option>
-                <option value="contains">Содержит</option>
-                <option value="ncontains">Не содержит</option>
+                {/* Условия для текстовых полей */}
+                {['name', 'type', 'location', 'status', 'manufacturer', 'model', 'serialNumber', 'department', 'rack', 'user', 'supplier', 'project', 'invoiceNumber', 'contractNumber', 'comment'].includes(c.field) && (
+                  <>
+                    <option value="eq">Равно</option>
+                    <option value="neq">Не равно</option>
+                    <option value="contains">Содержит</option>
+                    <option value="ncontains">Не содержит</option>
+                  </>
+                )}
+                
+                {/* Условия для числовых полей */}
+                {['cost', 'warrantyMonths'].includes(c.field) && (
+                  <>
+                    <option value="eq">Равно</option>
+                    <option value="neq">Не равно</option>
+                    <option value="gt">Больше</option>
+                    <option value="gte">Не менее</option>
+                    <option value="lt">Меньше</option>
+                    <option value="lte">Не более</option>
+                  </>
+                )}
+                
+                {/* Условия для инвентарного номера (может быть числовым или текстовым) */}
+                {c.field === 'inventoryNumber' && (
+                  <>
+                    <option value="eq">Равно</option>
+                    <option value="neq">Не равно</option>
+                    <option value="contains">Содержит</option>
+                    <option value="ncontains">Не содержит</option>
+                    <option value="gt">Больше</option>
+                    <option value="gte">Не менее</option>
+                    <option value="lt">Меньше</option>
+                    <option value="lte">Не более</option>
+                  </>
+                )}
+                
+                {/* Условия для дата полей */}
+                {c.field === 'purchaseDate' && (
+                  <>
+                    <option value="eq">Равно</option>
+                    <option value="neq">Не равно</option>
+                    <option value="gte">Не ранее</option>
+                    <option value="lte">Не позднее</option>
+                  </>
+                )}
               </TextField>
+              
+              {/* Значение в зависимости от типа поля и условия */}
               {c.op === 'eq' ? (
                 <TextField
                   select
@@ -477,24 +739,39 @@ const EquipmentList = () => {
                   sx={{ minWidth: 220 }}
                   SelectProps={{ native: true }}
                 >
-                  
+                  {/* Предустановленные значения для статусов */}
                   {c.field === 'status' && statuses.map(status => (
                     <option key={status} value={status}>{status}</option>
                   ))}
+                  
+                  {/* Предустановленные значения для местоположений */}
                   {c.field === 'location' && locations.map(loc => (
                     <option key={loc} value={loc}>{loc}</option>
                   ))}
+                  
+                  {/* Предустановленные значения для производителей */}
                   {c.field === 'manufacturer' && ['Dell', 'HP', 'Lenovo', 'Samsung', 'Cisco', 'Canon', 'LG'].map(man => (
                     <option key={man} value={man}>{man}</option>
                   ))}
+                  
+                  {/* Предустановленные значения для моделей */}
                   {c.field === 'model' && ['Latitude 5520', 'LaserJet Pro M404n', 'S24F350', 'Catalyst 2960', 'ProLiant DL380', 'ThinkPad X1 Carbon', 'PIXMA TS8320', '27UL850-W'].map(mod => (
                     <option key={mod} value={mod}>{mod}</option>
                   ))}
-                  {c.field === 'name' && (
+                  
+                  {/* Поля для ручного ввода */}
+                  {['name', 'serialNumber', 'comment', 'supplier', 'project', 'invoiceNumber', 'contractNumber', 'user', 'rack', 'department', 'type'].includes(c.field) && (
                     <option value="">Введите вручную</option>
                   )}
-                  {c.field === 'serialNumber' && (
-                    <option value="">Введите вручную</option>
+                  
+                  {/* Числовые поля */}
+                  {['cost', 'warrantyMonths'].includes(c.field) && (
+                    <option value="">Введите число</option>
+                  )}
+                  
+                  {/* Дата */}
+                  {c.field === 'purchaseDate' && (
+                    <option value="">Выберите дату</option>
                   )}
                 </TextField>
               ) : (
@@ -504,12 +781,25 @@ const EquipmentList = () => {
                   value={c.value}
                   onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, value: e.target.value}:x))}
                   sx={{ minWidth: 220 }}
+                  type={c.field === 'purchaseDate' ? 'date' : c.field === 'cost' || c.field === 'warrantyMonths' ? 'number' : 'text'}
+                  InputLabelProps={c.field === 'purchaseDate' ? { shrink: true } : {}}
                 />
               )}
-              <Button size="small" color="error" onClick={() => setConditions(prev => prev.filter((_,i)=>i!==idx))}>Удалить</Button>
+              
+              <Button size="small" color="error" onClick={() => setConditions(prev => prev.filter((_,i)=>i!==idx))} disabled={conditions.length === 1}>
+                Удалить
+              </Button>
             </Box>
           ))}
-          <Button size="small" onClick={() => setConditions(prev => [...prev, { field: 'name', op: 'contains', value: '' }])}>Добавить условие</Button>
+          
+          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+            <Button size="small" onClick={() => setConditions(prev => [...prev, { field: 'name', op: 'contains', value: '', operator: 'AND' }])}>
+              Добавить фильтр
+            </Button>
+            <Button size="small" onClick={() => setConditions([{ field: 'name', op: 'contains', value: '' }])}>
+              Сбросить
+            </Button>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setFiltersDialogOpen(false)} variant="contained">Готово</Button>
@@ -537,6 +827,25 @@ const EquipmentList = () => {
 
       {/* Таблица оборудования */}
       <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+        {/* Описание примененных фильтров */}
+        {(() => {
+          const activeFilters = getFiltersDescription();
+          if (activeFilters.length > 0) {
+            return (
+              <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'grey.50' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FilterAltIcon fontSize="small" />
+                  Отфильтровано: {activeFilters.join(', ')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                  Найдено записей: {filteredWithAdvanced.length} из {equipmentData.length}
+                </Typography>
+              </Box>
+            );
+          }
+          return null;
+        })()}
+        
         <TableContainer>
           <Table stickyHeader>
             <TableHead>
@@ -562,8 +871,8 @@ const EquipmentList = () => {
                       key==='model'?'Модель':
                       key==='serialNumber'?'Серийный номер':
                       key==='purchaseDate'?'Дата покупки':
-                      key==='warrantyExpiry'?'Гарантия (мес.)':
-                      key==='budget'?'Стоимость':
+                      key==='warrantyMonths'?'Гарантия (мес.)':
+                      key==='cost'?'Стоимость':
                       key==='comment'?'Комментарий':
                       key==='supplier'?'Поставщик':
                       key==='project'?'Проект':
@@ -618,8 +927,8 @@ const EquipmentList = () => {
                           </Typography>
                         )}
                         {key === 'purchaseDate' && equipment.purchaseDate}
-                        {key === 'warrantyExpiry' && equipment.warrantyMonths ? `${equipment.warrantyMonths} мес.` : ''}
-                        {key === 'budget' && equipment.cost ? `${equipment.cost} ₽` : ''}
+                        {key === 'warrantyMonths' && equipment.warrantyMonths ? `${equipment.warrantyMonths} мес.` : ''}
+                        {key === 'cost' && equipment.cost ? `${equipment.cost} ₽` : ''}
                         {key === 'comment' && equipment.comment}
                         {key === 'supplier' && equipment.supplier}
                         {key === 'project' && equipment.project}

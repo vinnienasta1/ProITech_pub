@@ -9,12 +9,13 @@ export type EquipmentColumnKey =
   | 'model'
   | 'serialNumber'
   | 'purchaseDate'
-  | 'warrantyExpiry'
-  | 'budget'
-  | 'comment'
+  | 'warrantyMonths'
+  | 'cost'
   | 'supplier'
   | 'project'
-  | 'user';
+  | 'user'
+  | 'rack'
+  | 'comment';
 
 export interface ColumnPref {
   key: EquipmentColumnKey;
@@ -24,25 +25,25 @@ export interface ColumnPref {
 const STORAGE_KEY = 'equipment_columns_v1';
 
 export function getDefaultColumnPrefs(): ColumnPref[] {
-  // По умолчанию показываем ключевые 7 колонок, остальные доступны в настройках
+  // По умолчанию показываем ключевые 8 колонок, остальные доступны в настройках
   const defaults: ColumnPref[] = [
     { key: 'invNumber', visible: true },
     { key: 'type', visible: true },
     { key: 'name', visible: true },
     { key: 'department', visible: true },
-
     { key: 'status', visible: true },
     { key: 'location', visible: true },
-    { key: 'manufacturer', visible: false },
-    { key: 'model', visible: false },
+    { key: 'manufacturer', visible: true },
+    { key: 'model', visible: true },
     { key: 'serialNumber', visible: false },
     { key: 'purchaseDate', visible: false },
-    { key: 'warrantyExpiry', visible: false },
-    { key: 'budget', visible: false },
-    { key: 'comment', visible: false },
+    { key: 'warrantyMonths', visible: false },
+    { key: 'cost', visible: false },
     { key: 'supplier', visible: false },
     { key: 'project', visible: false },
     { key: 'user', visible: false },
+    { key: 'rack', visible: false },
+    { key: 'comment', visible: false },
   ];
   return defaults;
 }
