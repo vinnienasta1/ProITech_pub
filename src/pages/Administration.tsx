@@ -46,6 +46,7 @@ import {
 } from '@mui/icons-material';
 import { getStatuses, saveStatuses, StatusItem } from '../storage/statusStorage';
 import { getEntities, saveEntities } from '../storage/entitiesStorage';
+import { getEquipment } from '../storage/equipmentStorage';
 import ColorPicker from '../components/ColorPicker';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -105,6 +106,23 @@ const Administration = () => {
   const [dialogType, setDialogType] = useState<'equipmentType' | 'department' | 'status' | 'supplier' | 'project' | 'location' | 'shelf'>('equipmentType');
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
+  
+  // Состояние для диалога подтверждения изменений
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    type: string;
+    oldName: string;
+    newName: string;
+    affectedCount: number;
+    onConfirm: () => void;
+  }>({
+    open: false,
+    type: '',
+    oldName: '',
+    newName: '',
+    affectedCount: 0,
+    onConfirm: () => {},
+  });
   const [statuses, setStatuses] = useState<StatusItem[]>([]);
   const [entities, setEntities] = useState<any>(null);
 
@@ -190,23 +208,79 @@ const Administration = () => {
         color: formData.color || '#607d8b',
         description: formData.description || '',
       };
+      
+      // Проверяем, изменилось ли название статуса
+      if (editingItem && editingItem.name !== payload.name) {
+        const affectedCount = checkAffectedItems('status', editingItem.name, payload.name);
+        if (affectedCount > 0) {
+          setConfirmDialog({
+            open: true,
+            type: 'status',
+            oldName: editingItem.name,
+            newName: payload.name,
+            affectedCount,
+            onConfirm: () => {
+              updateAffectedItems('status', editingItem.name, payload.name);
+              upsertStatus(payload);
+              setOpenDialog(false);
+              setConfirmDialog(prev => ({ ...prev, open: false }));
+            }
+          });
+          return;
+        }
+      }
+      
       upsertStatus(payload);
       setOpenDialog(false);
       return;
     }
+    
     const key = dialogType === 'equipmentType' ? 'types' :
       dialogType === 'department' ? 'departments' :
       dialogType === 'supplier' ? 'suppliers' :
       dialogType === 'project' ? 'projects' :
       dialogType === 'shelf' ? 'shelves' : 'locations';
+    
     const list = (entities as any)[key] as any[];
     let updated: any[];
+    
     if (editingItem) {
+      // Проверяем, изменилось ли название
+      const nameField = dialogType === 'equipmentType' ? 'name' : 
+                       dialogType === 'department' ? 'name' :
+                       dialogType === 'supplier' ? 'name' :
+                       dialogType === 'project' ? 'name' :
+                       dialogType === 'shelf' ? 'name' : 'name';
+      
+      if (editingItem[nameField] !== formData[nameField]) {
+        const affectedCount = checkAffectedItems(dialogType, editingItem[nameField], formData[nameField]);
+        if (affectedCount > 0) {
+          setConfirmDialog({
+            open: true,
+            type: dialogType,
+            oldName: editingItem[nameField],
+            newName: formData[nameField],
+            affectedCount,
+            onConfirm: () => {
+              updateAffectedItems(dialogType, editingItem[nameField], formData[nameField]);
+              const updated = list.map((x: any) => x.id === editingItem.id ? { ...editingItem, ...formData } : x);
+              const next = { ...entities, [key]: updated };
+              setEntities(next);
+              saveEntities(next);
+              setOpenDialog(false);
+              setConfirmDialog(prev => ({ ...prev, open: false }));
+            }
+          });
+          return;
+        }
+      }
+      
       updated = list.map((x: any) => x.id === editingItem.id ? { ...editingItem, ...formData } : x);
     } else {
       const newId = list.length ? Math.max(...list.map((x: any) => x.id)) + 1 : 1;
       updated = [...list, { id: newId, ...formData }];
     }
+    
     const next = { ...entities, [key]: updated };
     setEntities(next);
     saveEntities(next);
@@ -215,6 +289,126 @@ const Administration = () => {
 
   const handleThemeChange = (field: keyof typeof themeSettings, value: any) => {
     updateTheme({ [field]: value });
+  };
+
+  // Функция для проверки связанных позиций
+  const checkAffectedItems = (type: string, oldName: string, newName: string): number => {
+    if (oldName === newName) return 0;
+    
+    const equipment = getEquipment();
+    let count = 0;
+    
+    switch (type) {
+      case 'department':
+        count = equipment.filter(item => item.department === oldName).length;
+        break;
+      case 'status':
+        count = equipment.filter(item => item.status === oldName).length;
+        break;
+      case 'location':
+        count = equipment.filter(item => item.location === oldName).length;
+        break;
+      case 'supplier':
+        count = equipment.filter(item => item.supplier === oldName).length;
+        break;
+      case 'project':
+        count = equipment.filter(item => item.project === oldName).length;
+        break;
+      case 'rack':
+        count = equipment.filter(item => item.rack === oldName).length;
+        break;
+      case 'type':
+        count = equipment.filter(item => item.type === oldName).length;
+        break;
+      case 'manufacturer':
+        count = equipment.filter(item => item.manufacturer === oldName).length;
+        break;
+      case 'user':
+        count = equipment.filter(item => item.user === oldName).length;
+        break;
+    }
+    
+    return count;
+  };
+
+  // Функция для обновления связанных позиций
+  const updateAffectedItems = (type: string, oldName: string, newName: string) => {
+    if (oldName === newName) return;
+    
+    const { updateEquipmentByInventoryNumber } = require('../storage/equipmentStorage');
+    const equipment = getEquipment();
+    
+    // Если обновляем статус, также обновляем его в statusStorage
+    if (type === 'status') {
+      const { updateStatus } = require('../storage/statusStorage');
+      updateStatus(oldName, newName);
+    }
+    
+    equipment.forEach(item => {
+      let shouldUpdate = false;
+      let updates: any = {};
+      
+      switch (type) {
+        case 'department':
+          if (item.department === oldName) {
+            shouldUpdate = true;
+            updates.department = newName;
+          }
+          break;
+        case 'status':
+          if (item.status === oldName) {
+            shouldUpdate = true;
+            updates.status = newName;
+          }
+          break;
+        case 'location':
+          if (item.location === oldName) {
+            shouldUpdate = true;
+            updates.location = newName;
+          }
+          break;
+        case 'supplier':
+          if (item.supplier === oldName) {
+            shouldUpdate = true;
+            updates.supplier = newName;
+          }
+          break;
+        case 'project':
+          if (item.project === oldName) {
+            shouldUpdate = true;
+            updates.project = newName;
+          }
+          break;
+        case 'rack':
+          if (item.rack === oldName) {
+            shouldUpdate = true;
+            updates.rack = newName;
+          }
+          break;
+        case 'type':
+          if (item.type === oldName) {
+            shouldUpdate = true;
+            updates.type = newName;
+          }
+          break;
+        case 'manufacturer':
+          if (item.manufacturer === oldName) {
+            shouldUpdate = true;
+            updates.manufacturer = newName;
+          }
+          break;
+        case 'user':
+          if (item.user === oldName) {
+            shouldUpdate = true;
+            updates.user = newName;
+          }
+          break;
+      }
+      
+      if (shouldUpdate) {
+        updateEquipmentByInventoryNumber(item.inventoryNumber, updates);
+      }
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -918,6 +1112,50 @@ const Administration = () => {
           <Button onClick={() => setOpenDialog(false)}>Отмена</Button>
           <Button onClick={handleSave} variant="contained">
             {editingItem ? 'Сохранить' : 'Добавить'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Диалог подтверждения изменений */}
+      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog(prev => ({ ...prev, open: false }))} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ color: 'warning.main' }}>
+          ⚠️ Внимание! Изменение затронет существующие позиции
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              При изменении названия <strong>"{confirmDialog.oldName}"</strong> на <strong>"{confirmDialog.newName}"</strong> 
+              будут затронуты <strong>{confirmDialog.affectedCount}</strong> позиций оборудования.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Выберите действие:
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 0 }}>
+          <Button 
+            onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
+            variant="outlined"
+          >
+            Отмена
+          </Button>
+          <Button 
+            onClick={() => {
+              // Очищаем связанные позиции (устанавливаем пустое значение)
+              updateAffectedItems(confirmDialog.type, confirmDialog.oldName, '');
+              setConfirmDialog(prev => ({ ...prev, open: false }));
+            }}
+            variant="outlined"
+            color="warning"
+          >
+            Очистить
+          </Button>
+          <Button 
+            onClick={confirmDialog.onConfirm}
+            variant="contained"
+            color="primary"
+          >
+            Переписать
           </Button>
         </DialogActions>
       </Dialog>

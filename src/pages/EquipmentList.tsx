@@ -217,6 +217,7 @@ const EquipmentList = () => {
   const statuses = useMemo(() => getStatuses().map(s => s.name), []);
   const locations = ['Офис ПРМ - Склад', 'Офис ПРМ - Кабинет', 'Офис ПРМ - Серверная', 'Офис МСК - Кабинет руководства', 'Офис СПБ - IT отдел'];
   const users = useMemo(() => getEntities().users?.map(u => u.name) || [], []);
+  const entities = useMemo(() => getEntities(), []);
 
   const filteredEquipment = equipmentData.filter((equipment) => {
     const matchesSearch = equipment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -369,6 +370,22 @@ const EquipmentList = () => {
   });
 
   const getStatusColor = (status: string) => {
+    // Получаем цвета статусов из хранилища
+    const { getStatuses } = require('../storage/statusStorage');
+    const statuses = getStatuses();
+    const statusItem = statuses.find((s: any) => s.name === status);
+    
+    if (statusItem) {
+      // Преобразуем hex цвет в MUI цвет
+      const color = statusItem.color;
+      if (color === '#4caf50') return 'success';
+      if (color === '#ff9800') return 'warning';
+      if (color === '#f44336') return 'error';
+      if (color === '#2196f3') return 'info';
+      if (color === '#9c27b0') return 'secondary';
+    }
+    
+    // Fallback на старые значения
     switch (status) {
       case 'Активно':
         return 'success';
@@ -402,26 +419,72 @@ const EquipmentList = () => {
       // Имитация выполнения операции
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      // Импортируем функцию обновления
+      const { updateEquipmentByInventoryNumber } = require('../storage/equipmentStorage');
+      
       // Обновляем данные в хранилище
       if (operation.type === 'status' && operation.value) {
         selectedItems.forEach(item => {
-          // Здесь будет обновление в хранилище
-          console.log(`Обновление статуса для ${item.id} на ${operation.value}`);
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { status: operation.value });
         });
       } else if (operation.type === 'location' && operation.value) {
         selectedItems.forEach(item => {
-          // Здесь будет обновление в хранилище
-          console.log(`Обновление местоположения для ${item.id} на ${operation.value}`);
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { location: operation.value });
         });
-             } else if (operation.type === 'type' && operation.value) {
+      } else if (operation.type === 'type' && operation.value) {
         selectedItems.forEach(item => {
-           // Здесь будет обновление в хранилище
-           console.log(`Обновление типа для ${item.id} на ${operation.value}`);
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { type: operation.value });
         });
+      } else if (operation.type === 'department' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { department: operation.value });
+        });
+      } else if (operation.type === 'manufacturer' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { manufacturer: operation.value });
+        });
+      } else if (operation.type === 'model' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { model: operation.value });
+        });
+      } else if (operation.type === 'supplier' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { supplier: operation.value });
+        });
+      } else if (operation.type === 'project' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { project: operation.value });
+        });
+      } else if (operation.type === 'rack' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { rack: operation.value });
+        });
+      } else if (operation.type === 'comment' && operation.value) {
+        selectedItems.forEach(item => {
+          const currentComment = item.comment || '';
+          const newComment = currentComment ? `${currentComment}\n${operation.value}` : operation.value;
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { comment: newComment });
+        });
+      } else if (operation.type === 'assign' && operation.value) {
+        selectedItems.forEach(item => {
+          updateEquipmentByInventoryNumber(item.inventoryNumber, { user: operation.value });
+        });
+      } else if (operation.type === 'clear' && operation.value) {
+        const fieldsToClear = JSON.parse(operation.value);
+        selectedItems.forEach(item => {
+          const updates: any = {};
+          fieldsToClear.forEach((field: string) => {
+            updates[field] = '';
+          });
+          updateEquipmentByInventoryNumber(item.inventoryNumber, updates);
+        });
+      } else if (operation.type === 'export') {
+        console.log(`Экспорт ${selectedItems.length} элементов`);
       }
       
       // Принудительно обновляем компонент
       setSelectedItems([]);
+      setRefreshKey(prev => prev + 1); // Обновляем данные
       
       addNotification({
         type: 'success',
@@ -429,6 +492,7 @@ const EquipmentList = () => {
         message: `Операция "${operation.type}" успешно применена к ${selectedItems.length} элементам`,
       });
     } catch (error) {
+      console.error('Ошибка массовой операции:', error);
       addNotification({
         type: 'error',
         title: 'Ошибка операции',
@@ -1278,6 +1342,10 @@ const EquipmentList = () => {
         availableLocations={locations}
         availableTypes={types.filter(c => c !== 'Все')}
         availableUsers={users}
+        availableDepartments={entities?.departments?.map((d: any) => d.name) || []}
+        availableSuppliers={entities?.suppliers?.map((s: any) => s.name) || []}
+        availableProjects={entities?.projects?.map((p: any) => p.name) || []}
+        availableShelves={entities?.shelves?.map((s: any) => s.name) || []}
       />
 
       {/* Экспорт данных */}
@@ -1359,8 +1427,8 @@ const EquipmentList = () => {
                   >
                     {bulkActionField === 'status' && statuses.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                     {bulkActionField === 'location' && locations.map(l => <MenuItem key={l} value={l}>{l}</MenuItem>)}
-                    {bulkActionField === 'department' && ['IT отдел', 'Отдел продаж', 'Бухгалтерия', 'HR отдел', 'Руководство'].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
-                                         {bulkActionField === 'type' && types.filter(c => c !== 'Все').map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                    {bulkActionField === 'department' && entities?.departments?.map((d: any) => <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>)}
+                    {bulkActionField === 'type' && types.filter(c => c !== 'Все').map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                   </Select>
                 </FormControl>
               )

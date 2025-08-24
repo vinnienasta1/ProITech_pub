@@ -21,17 +21,19 @@ const defaults = {
     { id: 2, name: 'Отдел продаж', code: 'SALES', manager: 'Петров П.П.' },
     { id: 3, name: 'Бухгалтерия', code: 'ACC', manager: 'Сидорова С.С.' },
     { id: 4, name: 'HR отдел', code: 'HR', manager: 'Козлова К.К.' },
+    { id: 5, name: 'Руководство', code: 'MGMT', manager: 'Директор' },
   ] as Department[],
   suppliers: [
-    { id: 1, name: 'ООО "ТехноСервис"', contact: 'Иванов А.А.', phone: '+7 (999) 123-45-67', email: 'info@technoservice.ru' },
-    { id: 2, name: 'ООО "КомпьютерМир"', contact: 'Петров Б.Б.', phone: '+7 (999) 234-56-78', email: 'sales@computermir.ru' },
-    { id: 3, name: 'ООО "Электроника+"', contact: 'Сидоров В.В.', phone: '+7 (999) 345-67-89', email: 'contact@electronics.ru' },
+    { id: 1, name: 'ООО "ТехСнаб"', contact: 'Иванов А.А.', phone: '+7 (999) 123-45-67', email: 'info@technosnab.ru' },
+    { id: 2, name: 'ИП Иванов', contact: 'Петров Б.Б.', phone: '+7 (999) 234-56-78', email: 'sales@ip-ivanov.ru' },
+    { id: 3, name: 'ЗАО "КомпьютерМир"', contact: 'Сидоров В.В.', phone: '+7 (999) 345-67-89', email: 'contact@computermir.ru' },
+    { id: 4, name: 'ООО "IT-Сервис"', contact: 'Козлов Г.Г.', phone: '+7 (999) 456-78-90', email: 'info@it-service.ru' },
   ] as Supplier[],
   projects: [
-    { id: 1, name: 'Оцифровка документов', code: 'DOC-2024', status: 'active' },
-    { id: 2, name: 'Обновление серверов', code: 'SRV-2024', status: 'active' },
-    { id: 3, name: 'Внедрение CRM', code: 'CRM-2023', status: 'completed' },
-    { id: 4, name: 'Модернизация сети', code: 'NET-2024', status: 'on-hold' },
+    { id: 1, name: 'Проект А', code: 'PROJ-A', status: 'active' },
+    { id: 2, name: 'Проект Б', code: 'PROJ-B', status: 'active' },
+    { id: 3, name: 'Проект В', code: 'PROJ-C', status: 'completed' },
+    { id: 4, name: 'Внутренний', code: 'INTERNAL', status: 'active' },
   ] as Project[],
   locations: [
     { id: 1, name: 'Склад', parent: 'Офис ПРМ', fullPath: 'Офис ПРМ - Склад', description: 'Складское помещение' },
@@ -42,9 +44,15 @@ const defaults = {
     { id: 6, name: 'IT отдел', parent: 'Офис СПБ', fullPath: 'Офис СПБ - IT отдел', description: 'Отдел информационных технологий' },
   ] as Location[],
   shelves: [
-    { id: 1, name: 'Склад A / Ряд 1' },
-    { id: 2, name: 'Склад A / Ряд 2' },
-    { id: 3, name: 'Склад B / Зона 3' },
+    { id: 1, name: 'A1' },
+    { id: 2, name: 'A2' },
+    { id: 3, name: 'A3' },
+    { id: 4, name: 'B1' },
+    { id: 5, name: 'B2' },
+    { id: 6, name: 'B3' },
+    { id: 7, name: 'C1' },
+    { id: 8, name: 'C2' },
+    { id: 9, name: 'C3' },
   ] as Shelf[],
   users: [
     { id: 1, name: 'Иванов Иван Иванович', email: 'ivanov@company.ru', department: 'IT отдел', position: 'Системный администратор' },
@@ -52,6 +60,7 @@ const defaults = {
     { id: 3, name: 'Сидорова Анна Сергеевна', email: 'sidorova@company.ru', department: 'Отдел продаж', position: 'Менеджер' },
     { id: 4, name: 'Козлов Дмитрий Александрович', email: 'kozlov@company.ru', department: 'Бухгалтерия', position: 'Бухгалтер' },
     { id: 5, name: 'Смирнова Елена Владимировна', email: 'smirnova@company.ru', department: 'HR отдел', position: 'HR менеджер' },
+    { id: 6, name: 'Соколов Александр Петрович', email: 'sokolov@company.ru', department: 'Руководство', position: 'Генеральный директор' },
   ] as User[],
 };
 

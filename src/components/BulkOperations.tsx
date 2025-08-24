@@ -32,7 +32,7 @@ import {
 } from '@mui/icons-material';
 
 export interface BulkOperation {
-  type: 'status' | 'location' | 'comment' | 'assign' | 'export';
+  type: 'status' | 'location' | 'comment' | 'assign' | 'export' | 'department' | 'type' | 'manufacturer' | 'model' | 'serialNumber' | 'purchaseDate' | 'cost' | 'warrantyMonths' | 'supplier' | 'project' | 'invoiceNumber' | 'contractNumber' | 'rack' | 'clear';
   value?: string;
   description: string;
 }
@@ -46,6 +46,10 @@ interface BulkOperationsProps {
   availableLocations: string[];
   availableTypes: string[];
   availableUsers: string[];
+  availableDepartments: string[];
+  availableSuppliers: string[];
+  availableProjects: string[];
+  availableShelves: string[];
 }
 
 const BulkOperations: React.FC<BulkOperationsProps> = ({
@@ -57,10 +61,28 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
   availableLocations,
   availableTypes,
   availableUsers,
+  availableDepartments,
+  availableSuppliers,
+  availableProjects,
+  availableShelves,
 }) => {
   const [operation, setOperation] = useState<BulkOperation | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [fieldsToClear, setFieldsToClear] = useState<string[]>([]);
+
+  // Поля, которые можно очистить
+  const clearableFields = [
+    { key: 'department', label: 'Департамент' },
+    { key: 'location', label: 'Местоположение' },
+    { key: 'user', label: 'Пользователь' },
+    { key: 'supplier', label: 'Поставщик' },
+    { key: 'project', label: 'Проект' },
+    { key: 'rack', label: 'Стеллаж' },
+    { key: 'comment', label: 'Комментарий' },
+    { key: 'invoiceNumber', label: 'Номер счета' },
+    { key: 'contractNumber', label: 'Номер договора' },
+  ];
 
   const operations = [
     {
@@ -72,12 +94,68 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
       valueOptions: availableStatuses,
     },
     {
+      type: 'department' as const,
+      label: 'Изменить департамент',
+      icon: <AssignmentIcon />,
+      description: 'Установить новый департамент для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: availableDepartments,
+    },
+    {
+      type: 'type' as const,
+      label: 'Изменить тип',
+      icon: <AssignmentIcon />,
+      description: 'Установить новый тип для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: availableTypes,
+    },
+    {
       type: 'location' as const,
       label: 'Переместить',
       icon: <MoveIcon />,
       description: 'Переместить оборудование в другое местоположение',
       requiresValue: true,
       valueOptions: availableLocations,
+    },
+    {
+      type: 'manufacturer' as const,
+      label: 'Изменить производителя',
+      icon: <AssignmentIcon />,
+      description: 'Установить нового производителя для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: ['Dell', 'HP', 'Lenovo', 'Samsung', 'Cisco', 'Canon', 'LG'],
+    },
+    {
+      type: 'model' as const,
+      label: 'Изменить модель',
+      icon: <AssignmentIcon />,
+      description: 'Установить новую модель для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: ['Latitude 5520', 'LaserJet Pro M404n', 'S24F350', 'Catalyst 2960', 'ProLiant DL380', 'ThinkPad X1 Carbon', 'PIXMA TS8320', '27UL850-W'],
+    },
+    {
+      type: 'supplier' as const,
+      label: 'Изменить поставщика',
+      icon: <AssignmentIcon />,
+      description: 'Установить нового поставщика для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: availableSuppliers,
+    },
+    {
+      type: 'project' as const,
+      label: 'Изменить проект',
+      icon: <AssignmentIcon />,
+      description: 'Установить новый проект для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: availableProjects,
+    },
+    {
+      type: 'rack' as const,
+      label: 'Изменить стеллаж',
+      icon: <AssignmentIcon />,
+      description: 'Установить новый стеллаж для выбранного оборудования',
+      requiresValue: true,
+      valueOptions: availableShelves,
     },
     {
       type: 'comment' as const,
@@ -94,6 +172,14 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
       description: 'Назначить пользователя для выбранного оборудования',
       requiresValue: true,
       valueOptions: availableUsers,
+    },
+    {
+      type: 'clear' as const,
+      label: 'Очистить поля',
+      icon: <ClearIcon />,
+      description: 'Очистить выбранные поля у оборудования',
+      requiresValue: false,
+      valueOptions: [],
     },
     {
       type: 'export' as const,
@@ -125,12 +211,18 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
     setSuccess(false);
 
     try {
+      // Для операции очистки добавляем информацию о полях
+      if (operation.type === 'clear') {
+        operation.value = JSON.stringify(fieldsToClear);
+      }
+      
       await onBulkOperation(operation);
       setSuccess(true);
       setTimeout(() => {
         onClose();
         setSuccess(false);
         setOperation(null);
+        setFieldsToClear([]);
       }, 2000);
     } catch (error) {
       console.error('Ошибка массовой операции:', error);
@@ -259,6 +351,31 @@ const BulkOperations: React.FC<BulkOperationsProps> = ({
                       placeholder="Введите текст для добавления в комментарий..."
                       fullWidth
                     />
+                  </>
+                ) : operation.type === 'clear' ? (
+                  <>
+                    <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                      Выберите поля для очистки:
+                    </Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 1 }}>
+                      {clearableFields.map((field) => (
+                        <Button
+                          key={field.key}
+                          variant={fieldsToClear.includes(field.key) ? 'contained' : 'outlined'}
+                          size="small"
+                          onClick={() => {
+                            if (fieldsToClear.includes(field.key)) {
+                              setFieldsToClear(prev => prev.filter(f => f !== field.key));
+                            } else {
+                              setFieldsToClear(prev => [...prev, field.key]);
+                            }
+                          }}
+                          sx={{ justifyContent: 'flex-start' }}
+                        >
+                          {field.label}
+                        </Button>
+                      ))}
+                    </Box>
                   </>
                 ) : (
                   <>

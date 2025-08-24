@@ -31,4 +31,21 @@ export function saveStatuses(statuses: StatusItem[]): void {
   } catch {}
 }
 
+export function updateStatus(oldName: string, newName: string): void {
+  try {
+    const statuses = getStatuses();
+    const statusIndex = statuses.findIndex(s => s.name === oldName);
+    
+    if (statusIndex !== -1) {
+      // Сохраняем цвет и описание старого статуса
+      const oldStatus = statuses[statusIndex];
+      statuses[statusIndex] = {
+        ...oldStatus,
+        name: newName
+      };
+      saveStatuses(statuses);
+    }
+  } catch {}
+}
+
 

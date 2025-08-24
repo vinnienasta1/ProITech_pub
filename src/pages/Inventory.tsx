@@ -36,8 +36,6 @@ import {
   Paper, 
   TextField, 
   Button, 
-  Card,
-  CardContent,
   IconButton,
   Chip, 
   Dialog, 
@@ -48,6 +46,14 @@ import {
   ListItem,
   ListItemText,
   ListItemButton,
+  Checkbox,
+  ListItemIcon,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -56,6 +62,7 @@ import {
   Clear as ClearIcon,
   FileDownload as ExportIcon,
   Settings as ActionsIcon,
+  ViewColumn as ViewColumnIcon,
 } from '@mui/icons-material';
 import { getEquipment } from '../storage/equipmentStorage';
 import { getEntities } from '../storage/entitiesStorage';
@@ -75,6 +82,16 @@ interface FoundItem {
   user?: string;
   comment?: string;
   serialNumber?: string;
+  manufacturer?: string;
+  model?: string;
+  purchaseDate?: string;
+  cost?: number;
+  warrantyMonths?: number;
+  supplier?: string;
+  project?: string;
+  invoiceNumber?: string;
+  contractNumber?: string;
+  rack?: string;
 }
 
 interface BufferRow {
@@ -90,6 +107,8 @@ const Inventory: React.FC = () => {
   
   const [inputValue, setInputValue] = useState('');
   const [rows, setRows] = useState<BufferRow[]>([]);
+  const [bulkOperationsOpen, setBulkOperationsOpen] = useState(false);
+  const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
   const [selectionDialog, setSelectionDialog] = useState<{
     open: boolean;
     items: FoundItem[];
@@ -99,11 +118,107 @@ const Inventory: React.FC = () => {
     items: [],
     searchTerm: '',
   });
-  const [bulkOperationsOpen, setBulkOperationsOpen] = useState(false);
+  
+  // Настройки отображения колонок
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem('inventory_visible_columns');
+    return saved ? JSON.parse(saved) : {
+      inventoryNumber: true,
+      department: true,
+      name: true,
+      status: true,
+      location: true,
+      user: true,
+      type: true,
+      manufacturer: true,
+      model: true,
+      serialNumber: true,
+      comment: true
+    };
+  });
+  
+  // Порядок колонок для Drag and Drop
+  const [columnOrder, setColumnOrder] = useState(() => {
+    const saved = localStorage.getItem('inventory_column_order');
+    return saved ? JSON.parse(saved) : [
+      'inventoryNumber',
+      'department', 
+      'name',
+      'status',
+      'location',
+      'user',
+      'type',
+      'manufacturer',
+      'model',
+      'serialNumber',
+      'comment'
+    ];
+  });
+  
+  // Состояние для Drag and Drop
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+
+  // Функции для Drag and Drop
+  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
+    setIsDragging(true);
+    setDraggedColumn(columnKey);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetColumn: string) => {
+    e.preventDefault();
+    if (draggedColumn && draggedColumn !== targetColumn) {
+      const newOrder = [...columnOrder];
+      const draggedIndex = newOrder.indexOf(draggedColumn);
+      const targetIndex = newOrder.indexOf(targetColumn);
+      
+      newOrder.splice(draggedIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedColumn);
+      
+      setColumnOrder(newOrder);
+      localStorage.setItem('inventory_column_order', JSON.stringify(newOrder));
+    }
+    setIsDragging(false);
+    setDraggedColumn(null);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    setDraggedColumn(null);
+  };
+
+  // Функция для изменения видимости колонок с сохранением
+  const handleColumnVisibilityChange = (key: string, value: boolean) => {
+    const newVisibleColumns = { ...visibleColumns, [key]: value };
+    setVisibleColumns(newVisibleColumns);
+    localStorage.setItem('inventory_visible_columns', JSON.stringify(newVisibleColumns));
+  };
+
+  // Получаем видимые колонки в правильном порядке
+  const orderedVisibleColumns = columnOrder.filter((key: string) => visibleColumns[key as keyof typeof visibleColumns]);
 
   const equipment = getEquipment();
   const entities = getEntities();
   const statuses = getStatuses();
+
+  // Функция для получения цвета статуса в формате MUI
+  const getStatusColor = useCallback((status: string) => {
+    const statusInfo = statuses.find((s: any) => s.name === status);
+    if (statusInfo) {
+      // Преобразуем hex цвет в MUI цвет
+      const color = statusInfo.color;
+      if (color === '#4caf50') return 'success';
+      if (color === '#ff9800') return 'warning';
+      if (color === '#f44336') return 'error';
+      if (color === '#2196f3') return 'info';
+      if (color === '#9c27b0') return 'secondary';
+    }
+    return 'default';
+  }, [statuses]);
 
   /**
    * 🚨 КРИТИЧЕСКИЙ useEffect: Загрузка буфера
@@ -415,7 +530,7 @@ const Inventory: React.FC = () => {
 
   const getFoundEquipment = useCallback(() => {
     return rows
-      .filter(row => row.item)
+      .filter(row => row.item && row.status === 'found') // Only include 'found' items
       .map(row => ({
         id: row.item!.id,
         inventoryNumber: row.item!.inventoryNumber,
@@ -426,14 +541,25 @@ const Inventory: React.FC = () => {
         location: row.item!.location,
         user: row.item!.user,
         comment: row.item!.comment,
+        serialNumber: row.item!.serialNumber,
+        manufacturer: row.item!.manufacturer,
+        model: row.item!.model,
+        purchaseDate: row.item!.purchaseDate,
+        cost: row.item!.cost,
+        warrantyMonths: row.item!.warrantyMonths,
+        supplier: row.item!.supplier,
+        project: row.item!.project,
+        invoiceNumber: row.item!.invoiceNumber,
+        contractNumber: row.item!.contractNumber,
+        rack: row.item!.rack,
       }));
   }, [rows]);
 
   const getAvailableOptions = useCallback(() => ({
-    statuses: statuses.map(s => s.name),
-    locations: entities.locations?.map(l => l.fullPath) || [],
-    types: entities.types?.map(t => t.name) || [],
-    users: entities.users?.map(u => u.name) || [],
+    statuses: statuses.map((s: any) => s.name),
+    locations: entities.locations?.map((l: any) => l.fullPath) || [],
+    types: entities.types?.map((t: any) => t.name) || [],
+    users: entities.users?.map((u: any) => u.name) || [],
   }), [statuses, entities]);
 
   /**
@@ -465,6 +591,25 @@ const Inventory: React.FC = () => {
       updates.comment = operation.value;
     } else if (operation.type === 'assign' && operation.value) {
       updates.user = operation.value;
+    } else if (operation.type === 'department' && operation.value) {
+      updates.department = operation.value;
+    } else if (operation.type === 'type' && operation.value) {
+      updates.type = operation.value;
+    } else if (operation.type === 'manufacturer' && operation.value) {
+      updates.manufacturer = operation.value;
+    } else if (operation.type === 'model' && operation.value) {
+      updates.model = operation.value;
+    } else if (operation.type === 'supplier' && operation.value) {
+      updates.supplier = operation.value;
+    } else if (operation.type === 'project' && operation.value) {
+      updates.project = operation.value;
+    } else if (operation.type === 'rack' && operation.value) {
+      updates.rack = operation.value;
+    } else if (operation.type === 'clear' && operation.value) {
+      const fieldsToClear = JSON.parse(operation.value);
+      fieldsToClear.forEach((field: string) => {
+        updates[field] = '';
+      });
     }
 
     try {
@@ -586,49 +731,120 @@ const Inventory: React.FC = () => {
   }, []);
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
-        Инвентаризация
-      </Typography>
+    <Box sx={{ p: 3, minHeight: '100vh', backgroundColor: 'background.default' }}>
+      {/* Улучшенная форма ввода */}
+      <Paper 
+        elevation={3}
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 3,
+          background: 'linear-gradient(135deg, rgba(25, 118, 210, 0.05), rgba(66, 165, 245, 0.05))',
+          border: '1px solid',
+          borderColor: 'divider',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+            Добавить оборудование
+          </Typography>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <TextField
+              fullWidth
+              placeholder="Введите инв. номер или серийный номер"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              size="medium"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main',
+                    }
+                  },
+                  '&.Mui-focused': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main',
+                      borderWidth: 2
+                    }
+                  }
+                }
+              }}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              startIcon={<AddIcon />}
+              size="large"
+              sx={{
+                borderRadius: 2,
+                px: 4,
+                py: 1.5,
+                background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+                boxShadow: '0 4px 15px rgba(25, 118, 210, 0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #1565c0, #1976d2)',
+                  boxShadow: '0 6px 20px rgba(25, 118, 210, 0.4)',
+                  transform: 'translateY(-1px)'
+                },
+                transition: 'all 0.3s ease'
+              }}
+            >
+              Добавить
+            </Button>
+          </form>
+        </Box>
+      </Paper>
 
-      {/* Шапка с элементами управления */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-          <Box sx={{ flex: '1 1 400px', minWidth: 0 }}>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8 }}>
-        <TextField
-                fullWidth
-                placeholder="Введите инв. номер или серийный номер"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                size="small"
-              />
+      {/* Буфер инвентаризации */}
+      <Paper 
+        elevation={2}
+        sx={{ 
+          borderRadius: 3,
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        {/* Заголовок буфера */}
+        <Box sx={{ 
+          p: 3, 
+          borderBottom: '1px solid', 
+          borderColor: 'divider',
+          background: 'linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(66, 165, 245, 0.08))'
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              Буфер инвентаризации
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <Button
-                type="submit"
-                variant="contained"
-                startIcon={<AddIcon />}
+                variant="outlined"
+                startIcon={<ViewColumnIcon />}
+                onClick={() => setColumnsDialogOpen(true)}
                 size="small"
+                sx={{ borderRadius: 2 }}
               >
-                Добавить
+                Колонки
               </Button>
-            </form>
-          </Box>
-          
-          <Box sx={{ flex: '1 1 600px', minWidth: 0 }}>
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <Button
                 variant="outlined"
                 startIcon={<ActionsIcon />}
                 onClick={() => setBulkOperationsOpen(true)}
                 size="small"
+                sx={{ borderRadius: 2 }}
               >
                 Действия
               </Button>
+
               <Button
                 variant="outlined"
                 startIcon={<ExportIcon />}
                 onClick={doExport}
                 size="small"
+                sx={{ borderRadius: 2 }}
               >
                 Экспорт
               </Button>
@@ -637,6 +853,7 @@ const Inventory: React.FC = () => {
                 startIcon={<ClearIcon />}
                 onClick={removeNonGreenData}
                 size="small"
+                sx={{ borderRadius: 2 }}
               >
                 Убрать не найденные
               </Button>
@@ -646,284 +863,328 @@ const Inventory: React.FC = () => {
                 startIcon={<ClearIcon />}
                 onClick={clearBufferData}
                 size="small"
+                sx={{ borderRadius: 2 }}
               >
                 Очистить буфер
               </Button>
             </Box>
           </Box>
+          
+          {/* Статистика */}
+          <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ 
+                width: 16, 
+                height: 16, 
+                borderRadius: '3px 0 0 3px',
+                background: 'linear-gradient(180deg, #4caf50 0%, rgba(76, 175, 80, 0.3) 100%)',
+                border: '1px solid #4caf50'
+              }} />
+              <Typography variant="body2" color="text.secondary">
+                Найдено: {rows.filter(r => r.status === 'found').length}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ 
+                width: 16, 
+                height: 16, 
+                borderRadius: '3px 0 0 3px',
+                background: 'linear-gradient(180deg, #9e9e9e 0%, rgba(158, 158, 158, 0.3) 100%)',
+                border: '1px solid #9e9e9e'
+              }} />
+              <Typography variant="body2" color="text.secondary">
+                Дубликаты: {rows.filter(r => r.status === 'duplicate').length}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ 
+                width: 16, 
+                height: 16, 
+                borderRadius: '3px 0 0 3px',
+                background: 'linear-gradient(180deg, #f44336 0%, rgba(244, 67, 54, 0.3) 100%)',
+                border: '1px solid #f44336'
+              }} />
+              <Typography variant="body2" color="text.secondary">
+                Не найдено: {rows.filter(r => r.status === 'not_found').length}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                Всего: {rows.length}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Список элементов */}
+        <Box sx={{ p: 2 }}>
+          {rows.length === 0 ? (
+            <Box sx={{ 
+              textAlign: 'center', 
+              py: 8,
+              color: 'text.secondary'
+            }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Буфер пуст
+              </Typography>
+              <Typography variant="body2">
+                Добавьте оборудование для начала инвентаризации
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    {orderedVisibleColumns.map((key: string, index: number) => (
+                      <TableCell
+                        key={key}
+                        sx={{ 
+                          fontWeight: 600
+                        }}
+                      >
+                        {key === 'inventoryNumber' ? 'Инв. номер' :
+                         key === 'department' ? 'Департамент' :
+                         key === 'name' ? 'Название' :
+                         key === 'status' ? 'Статус' :
+                         key === 'location' ? 'Местоположение' :
+                         key === 'user' ? 'Пользователь' :
+                         key === 'type' ? 'Тип' :
+                         key === 'manufacturer' ? 'Производитель' :
+                         key === 'model' ? 'Модель' :
+                         key === 'serialNumber' ? 'Серийный номер' :
+                         key === 'comment' ? 'Комментарий' : key}
+                      </TableCell>
+                    ))}
+                    <TableCell sx={{ fontWeight: 600 }}>Действия</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow 
+                      key={row.id} 
+                      hover
+                      sx={{
+                        backgroundColor: row.status === 'found' 
+                          ? 'rgba(76, 175, 80, 0.25)' // Более насыщенный зеленый для найденных
+                          : row.status === 'duplicate' 
+                            ? 'rgba(158, 158, 158, 0.25)' // Более насыщенный серый для дубликатов
+                            : 'rgba(244, 67, 54, 0.25)', // Более насыщенный красный для не найденных
+                        transition: 'all 0.2s ease',
+                        position: 'relative',
+                        height: '48px',
+                        '&:hover': {
+                          backgroundColor: row.status === 'found' 
+                            ? 'rgba(76, 175, 80, 0.35)' // Еще темнее при наведении
+                            : row.status === 'duplicate' 
+                              ? 'rgba(158, 158, 158, 0.35)'
+                              : 'rgba(244, 67, 54, 0.35)'
+                        },
+                        // Левая граница для дополнительного выделения
+                        borderLeft: row.status === 'found' 
+                          ? '3px solid #4caf50'
+                          : row.status === 'duplicate' 
+                            ? '3px solid #9e9e9e'
+                            : '3px solid #f44336'
+                      }}
+                    >
+                      
+                      {/* Динамические колонки */}
+                      {orderedVisibleColumns.map((key: string) => (
+                        <TableCell key={key} sx={{ py: 1 }}>
+                          {key === 'inventoryNumber' && row.item ? (
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                              {row.item.inventoryNumber}
+                            </Typography>
+                          ) : key === 'inventoryNumber' && !row.item ? (
+                            <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                              {row.serial}
+                            </Typography>
+                          ) : key === 'department' && row.item ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.department}
+                            </Typography>
+                          ) : key === 'department' && !row.item ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'name' && row.item ? (
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                color: 'primary.main',
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                fontWeight: 500,
+                                '&:hover': { 
+                                  color: 'primary.dark',
+                                  textDecoration: 'none'
+                                }
+                              }}
+                              onClick={() => navigate(`/equipment/${row.item!.inventoryNumber}`)}
+                            >
+                              {row.item.name}
+                            </Typography>
+                          ) : key === 'name' && !row.item ? (
+                            <Typography variant="body2" color="text.secondary">Не найдено</Typography>
+                          ) : key === 'status' && row.item ? (
+                            <Chip
+                              label={row.item.status}
+                              size="small"
+                              color={getStatusColor(row.item.status) as any}
+                              sx={{ 
+                                fontSize: '0.75rem',
+                                height: '20px' // Уменьшаем высоту чипа
+                              }}
+                            />
+                          ) : key === 'status' && !row.item ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'location' && row.item?.location ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.location}
+                            </Typography>
+                          ) : key === 'location' && (!row.item || !row.item.location) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'user' && row.item?.user ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.user}
+                            </Typography>
+                          ) : key === 'user' && (!row.item || !row.item.user) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'type' && row.item?.type ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.type}
+                            </Typography>
+                          ) : key === 'type' && (!row.item || !row.item.type) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'manufacturer' && row.item?.manufacturer ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.manufacturer}
+                            </Typography>
+                          ) : key === 'manufacturer' && (!row.item || !row.item.manufacturer) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'model' && row.item?.model ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.model}
+                            </Typography>
+                          ) : key === 'model' && (!row.item || !row.item.model) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'serialNumber' && row.item?.serialNumber ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.serialNumber}
+                            </Typography>
+                          ) : key === 'serialNumber' && (!row.item || !row.item.serialNumber) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : key === 'comment' && row.item?.comment ? (
+                            <Typography variant="body2" color="text.primary">
+                              {row.item.comment}
+                            </Typography>
+                          ) : key === 'comment' && (!row.item || !row.item.comment) ? (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                          ) : null}
+                        </TableCell>
+                      ))}
+                      <TableCell sx={{ py: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          {row.status === 'found' && row.item && (
+                            <IconButton
+                              size="small"
+                              onClick={() => showBarcode(row.item!.inventoryNumber)}
+                              sx={{ 
+                                color: 'primary.main',
+                                backgroundColor: 'primary.light',
+                                '&:hover': { 
+                                  backgroundColor: 'primary.main',
+                                  color: 'white'
+                                },
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <QrCodeIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                          <IconButton
+                            size="small"
+                            onClick={() => removeRow(row.id)}
+                            sx={{ 
+                              color: 'error.main',
+                              backgroundColor: 'error.light',
+                              '&:hover': { 
+                                backgroundColor: 'error.main',
+                                color: 'white'
+                              },
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </Box>
       </Paper>
 
-      {/* Буфер инвентаризации */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {rows.map((row) => (
-          <Card
-            key={row.id}
-            sx={{
-              backgroundColor: row.status === 'found' ? 'success.light' : 
-                              row.status === 'duplicate' ? 'grey.300' : 'error.light',
-              border: '1px solid',
-              borderColor: row.status === 'found' ? 'success.main' : 
-                          row.status === 'duplicate' ? 'grey.500' : 'error.main',
-            }}
-          >
-            <CardContent sx={{ p: 1, py: 0.5, minHeight: '32px', '&:last-child': { pb: 0.5 } }}>
-              <Box sx={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                gap: 1.5,
-                lineHeight: 1.2
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
-                  {row.status === 'found' && row.item ? (
-                    <>
-                      {/* Инвентарный номер и департамент */}
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          fontWeight: 'bold',
-                          fontSize: '0.875rem',
-                          color: 'text.primary'
-                        }}
-                      >
-                        {row.item.inventoryNumber}
-                      </Typography>
-                      <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          fontWeight: 'bold',
-                          fontSize: '0.875rem',
-                          color: 'text.primary'
-                        }}
-                      >
-                        {row.item.department}
-                      </Typography>
-                      <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                      
-                      {/* Наименование (кликабельное) */}
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          color: 'primary.main',
-                          fontSize: '0.875rem',
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          '&:hover': { color: 'primary.dark' }
-                        }}
-                        onClick={() => navigate(`/equipment/${row.item!.inventoryNumber}`)}
-                      >
-                        {row.item.name}
-                </Typography>
-                
-                      <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                      
-                      {/* Статус */}
-                      <Chip
-                        label={row.item.status}
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.75rem',
-                          height: '20px',
-                          backgroundColor: statuses.find(s => s.name === row.item!.status)?.color || 'default',
-                          color: 'white'
-                        }}
-                      />
-
-                      {/* Местоположение */}
-                      {row.item?.location && (
-                        <>
-                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                          <Typography 
-                            component="span" 
-                            sx={{ 
-                              color: 'text.primary',
-                              fontSize: '0.875rem'
-                            }}
-                          >
-                            {row.item.location}
-                  </Typography>
-                        </>
-                      )}
-
-                      {/* Пользователь */}
-                      {row.item?.user && (
-                        <>
-                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                          <Typography 
-                            component="span" 
-                            sx={{ 
-                              color: 'text.primary',
-                              fontSize: '0.875rem'
-                            }}
-                          >
-                            {row.item.user}
-                          </Typography>
-                        </>
-                      )}
-                    </>
-                  ) : row.status === 'duplicate' ? (
-                    <>
-                      <Typography 
-                        component="span" 
-                        sx={{ 
-                          fontStyle: 'italic',
-                          fontSize: '0.875rem',
-                          color: 'text.secondary'
-                        }}
-                      >
-                        Дубликат
-                      </Typography>
-                      {row.item && (
-                        <>
-                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                          <Typography 
-                            component="span" 
-                            sx={{ 
-                              fontWeight: 'bold',
-                              fontSize: '0.875rem',
-                              color: 'text.primary'
-                            }}
-                          >
-                            {row.item.inventoryNumber}
-                          </Typography>
-                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                          <Typography 
-                            component="span" 
-                            sx={{ 
-                              fontWeight: 'bold',
-                              fontSize: '0.875rem',
-                              color: 'text.primary'
-                            }}
-                          >
-                            {row.item.department}
-                          </Typography>
-                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                  <Typography 
-                            component="span" 
-                    sx={{ 
-                              color: 'primary.main',
-                              fontSize: '0.875rem',
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                      '&:hover': { color: 'primary.dark' }
-                    }}
-                            onClick={() => navigate(`/equipment/${row.item!.inventoryNumber}`)}
-                          >
-                            {row.item.name}
-                          </Typography>
-                          <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>|</Typography>
-                          <Chip
-                            label={row.item.status}
-                            size="small"
-                            sx={{ 
-                              fontSize: '0.75rem',
-                              height: '20px',
-                              backgroundColor: statuses.find(s => s.name === row.item!.status)?.color || 'default',
-                              color: 'white'
-                            }}
-                          />
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <Typography 
-                      component="span" 
-                      sx={{ 
-                        fontSize: '0.875rem',
-                        color: 'text.primary'
-                      }}
-                    >
-                      Не найдено: {row.serial}
-                  </Typography>
-                )}
-              </Box>
-
-                {/* Кнопки действий */}
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  {row.status === 'found' && row.item && (
-                    <IconButton
-                      size="small"
-                      onClick={() => showBarcode(row.item!.inventoryNumber)}
-                      sx={{ 
-                        color: 'primary.main',
-                        '&:hover': { backgroundColor: 'primary.light' }
-                      }}
-                    >
-                      <QrCodeIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                  <IconButton
-                    size="small"
-                    onClick={() => removeRow(row.id)}
-                    sx={{ 
-                      color: 'error.main',
-                      '&:hover': { backgroundColor: 'error.light' }
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-          ))}
-        </Box>
-
       {/* Диалог выбора оборудования */}
-      <Dialog
-        open={selectionDialog.open}
-        onClose={() => setSelectionDialog({ open: false, items: [], searchTerm: '' })}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Выберите оборудование</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            По запросу "{selectionDialog.searchTerm}" найдено несколько позиций:
-          </Typography>
-          <List>
-            {selectionDialog.items.map((item) => (
-              <ListItem key={item.id} disablePadding>
-                <ListItemButton onClick={() => handleSelectEquipment(item, selectionDialog.searchTerm)}>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {item.name}
-                        </Typography>
-                        <Chip
-                          label={item.status}
-                          size="small"
-                          color={statuses.find(s => s.name === item.status)?.color as any}
-                        />
-                      </Box>
+      {selectionDialog.open && (
+        <Dialog
+          open={selectionDialog.open}
+          onClose={() => setSelectionDialog({ ...selectionDialog, open: false })}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              overflow: 'hidden'
+            }
+          }}
+        >
+          <DialogTitle sx={{ 
+            background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
+            color: 'white',
+            fontWeight: 600
+          }}>
+            Выберите оборудование для добавления
+          </DialogTitle>
+          <DialogContent sx={{ p: 0 }}>
+            <List sx={{ p: 0 }}>
+              {selectionDialog.items.map((item) => (
+                <ListItem 
+                  key={item.id}
+                  disablePadding
+                  sx={{
+                    cursor: 'pointer',
+                    '&:hover': {
+                      backgroundColor: 'action.hover'
                     }
-                    secondary={
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">
-                          Инв. номер: {item.inventoryNumber} | Департамент: {item.department}
-                        </Typography>
-                        {item.location && (
-                          <Typography variant="body2" color="text.secondary">
-                            Местоположение: {item.location}
-                          </Typography>
-                        )}
-            </Box>
-                    }
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSelectionDialog({ open: false, items: [], searchTerm: '' })}>
-            Отмена
-          </Button>
-        </DialogActions>
-      </Dialog>
+                  }}
+                >
+                  <ListItemButton 
+                    onClick={() => handleSelectEquipment(item, selectionDialog.searchTerm)}
+                    sx={{ px: 3, py: 2 }}
+                  >
+                    <ListItemText 
+                      primary={`${item.inventoryNumber} - ${item.name}`}
+                      secondary={`Тип: ${item.type}, Статус: ${item.status}`}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 0 }}>
+            <Button 
+              onClick={() => setSelectionDialog({ ...selectionDialog, open: false })}
+              variant="contained"
+              sx={{ borderRadius: 2, px: 3 }}
+            >
+              Закрыть
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
 
       {/* Массовые операции */}
       <BulkOperations
@@ -935,7 +1196,101 @@ const Inventory: React.FC = () => {
         availableLocations={getAvailableOptions().locations}
         availableTypes={getAvailableOptions().types}
         availableUsers={getAvailableOptions().users}
+        availableDepartments={entities?.departments?.map((d: any) => d.name) || []}
+        availableSuppliers={entities?.suppliers?.map((s: any) => s.name) || []}
+        availableProjects={entities?.projects?.map((p: any) => p.name) || []}
+        availableShelves={entities?.shelves?.map((s: any) => s.name) || []}
       />
+
+      {/* Диалог настройки колонок */}
+      <Dialog
+        open={columnsDialogOpen}
+        onClose={() => setColumnsDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
+          color: 'white',
+          fontWeight: 600
+        }}>
+          Настройка отображения колонок
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <List sx={{ p: 0 }}>
+            {columnOrder.map((key: string) => (
+              <ListItem 
+                key={key} 
+                disablePadding
+                sx={{
+                  cursor: 'grab',
+                  '&:active': { cursor: 'grabbing' },
+                  opacity: isDragging && draggedColumn === key ? 0.5 : 1,
+                  transition: 'opacity 0.2s'
+                }}
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, key)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, key)}
+                onDragEnd={handleDragEnd}
+              >
+                <ListItemButton 
+                  onClick={() => handleColumnVisibilityChange(key, !visibleColumns[key as keyof typeof visibleColumns])}
+                  sx={{ px: 3, py: 2 }}
+                >
+                  <ListItemIcon>
+                    <Checkbox 
+                      edge="start" 
+                      checked={visibleColumns[key as keyof typeof visibleColumns]} 
+                      tabIndex={-1}
+                      disableRipple
+                    />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={
+                      key === 'inventoryNumber' ? 'Инвентарный номер' :
+                      key === 'department' ? 'Департамент' :
+                      key === 'name' ? 'Название' :
+                      key === 'status' ? 'Статус' :
+                      key === 'location' ? 'Местоположение' :
+                      key === 'user' ? 'Пользователь' :
+                      key === 'type' ? 'Тип' :
+                      key === 'manufacturer' ? 'Производитель' :
+                      key === 'model' ? 'Модель' :
+                      key === 'serialNumber' ? 'Серийный номер' :
+                      key === 'comment' ? 'Комментарий' : key
+                    }
+                  />
+                  <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+                    <ViewColumnIcon 
+                      sx={{ 
+                        color: 'text.secondary', 
+                        cursor: 'grab',
+                        '&:active': { cursor: 'grabbing' }
+                      }} 
+                    />
+                  </Box>
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 0 }}>
+          <Button 
+            onClick={() => setColumnsDialogOpen(false)}
+            variant="contained"
+            sx={{ borderRadius: 2, px: 3 }}
+          >
+            Закрыть
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
