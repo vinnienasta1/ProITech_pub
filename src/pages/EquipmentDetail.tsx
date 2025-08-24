@@ -79,6 +79,7 @@ const EquipmentDetail: React.FC = () => {
             if (equipment.name !== editData.name) changes.push(`наименование: "${equipment.name}" → "${editData.name}"`);
             if (equipment.type !== editData.type) changes.push(`тип: "${equipment.type}" → "${editData.type}"`);
             if (equipment.department !== editData.department) changes.push(`департамент: "${equipment.department}" → "${editData.department}"`);
+            if (equipment.user !== editData.user) changes.push(`пользователь: "${equipment.user}" → "${editData.user}"`);
             if (equipment.status !== editData.status) changes.push(`статус: "${equipment.status}" → "${editData.status}"`);
             if (equipment.location !== editData.location) changes.push(`местоположение: "${equipment.location}" → "${editData.location}"`);
             if (equipment.rack !== editData.rack) changes.push(`стеллаж: "${equipment.rack}" → "${editData.rack}"`);
@@ -218,6 +219,21 @@ const EquipmentDetail: React.FC = () => {
               {entities.departments?.map((dept) => (
                 <MenuItem key={dept.id} value={dept.name}>
                   {dept.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Пользователь</InputLabel>
+            <Select
+              value={editData.user || ''}
+              label="Пользователь"
+              onChange={(e) => handleInputChange('user', e.target.value)}
+            >
+              {entities.users?.map((user) => (
+                <MenuItem key={user.id} value={user.name}>
+                  {user.name}
                 </MenuItem>
               ))}
             </Select>

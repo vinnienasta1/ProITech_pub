@@ -1,3 +1,33 @@
+/**
+ * 🚨 ВАЖНО: ЛОГИКА ИНВЕНТАРИЗАЦИИ - НЕ ИЗМЕНЯТЬ БЕЗ ТЩАТЕЛЬНОГО ТЕСТИРОВАНИЯ!
+ * 
+ * КРИТИЧЕСКИЕ ПРИНЦИПЫ РАБОТЫ:
+ * 1. При повторном вводе поискового запроса ВСЕГДА показывается диалог выбора
+ * 2. Дубликат определяется ТОЛЬКО по инвентарному номеру уже выбранного оборудования
+ * 3. Буфер ВСЕГДА сохраняется в localStorage при любых изменениях
+ * 4. Массовые операции обновляют И буфер, И основное хранилище equipmentStorage
+ * 
+ * ТЕСТИРОВАНИЕ ПРИ ИЗМЕНЕНИЯХ:
+ * - Проверить повторный ввод поискового запроса
+ * - Проверить добавление дубликатов
+ * - Проверить сохранение буфера при смене страницы
+ * - Проверить работу массовых операций
+ * 
+ * КРИТИЧЕСКИЕ ФУНКЦИИ (НЕ ИЗМЕНЯТЬ БЕЗ ТЕСТИРОВАНИЯ):
+ * - addSerial: логика добавления и определения дубликатов
+ * - handleSelectEquipment: логика выбора оборудования из диалога
+ * - handleBulkOperation: логика массовых операций
+ * - searchEquipmentByNumbers: логика поиска оборудования
+ * - useEffect для сохранения/загрузки буфера
+ * 
+ * ПРИ ИЗМЕНЕНИИ ЛЮБОЙ ИЗ ЭТИХ ФУНКЦИЙ ОБЯЗАТЕЛЬНО:
+ * 1. Протестировать все сценарии работы
+ * 2. Проверить сохранение буфера
+ * 3. Проверить работу дубликатов
+ * 4. Проверить массовые операции
+ * 5. Обновить этот комментарий
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -30,7 +60,7 @@ import {
 import { getEquipment } from '../storage/equipmentStorage';
 import { getEntities } from '../storage/entitiesStorage';
 import { getStatuses } from '../storage/statusStorage';
-import { getInventoryBuffer, clearInventoryBuffer } from '../storage/inventoryBufferStorage';
+import { getInventoryBuffer, clearInventoryBuffer, saveInventoryBuffer } from '../storage/inventoryBufferStorage';
 import BulkOperations from '../components/BulkOperations';
 import { useActionLog } from '../contexts/ActionLogContext';
 
@@ -75,7 +105,14 @@ const Inventory: React.FC = () => {
   const entities = getEntities();
   const statuses = getStatuses();
 
-  // Загружаем буфер при монтировании компонента
+  /**
+   * 🚨 КРИТИЧЕСКИЙ useEffect: Загрузка буфера
+   * 
+   * ПРИНЦИП РАБОТЫ:
+   * 1. Загружает сохраненный буфер из localStorage при монтировании
+   * 2. Восстанавливает состояние между сессиями
+   * 3. НЕ ИЗМЕНЯТЬ логику загрузки!
+   */
   useEffect(() => {
     const bufferData = getInventoryBuffer();
     if (bufferData.length > 0) {
@@ -83,17 +120,31 @@ const Inventory: React.FC = () => {
     }
   }, []);
 
-  // Сохраняем буфер при изменении
+  /**
+   * 🚨 КРИТИЧЕСКИЙ useEffect: Сохранение буфера
+   * 
+   * ПРИНЦИП РАБОТЫ:
+   * 1. ВСЕГДА сохраняет весь буфер в localStorage при любых изменениях
+   * 2. Обеспечивает персистентность данных между сессиями
+   * 3. НЕ ИЗМЕНЯТЬ логику сохранения!
+   */
   useEffect(() => {
     if (rows.length > 0) {
-      // Сохраняем только строки с найденными предметами
-      const rowsToSave = rows.filter(row => row.item);
-      if (rowsToSave.length > 0) {
-        // Здесь можно добавить логику сохранения в localStorage
-      }
+      // Сохраняем все строки в localStorage
+      saveInventoryBuffer(rows);
     }
   }, [rows]);
 
+  /**
+   * 🚨 КРИТИЧЕСКАЯ ФУНКЦИЯ: searchEquipmentByNumbers
+   * 
+   * ПРИНЦИП РАБОТЫ:
+   * 1. Ищет по инвентарному номеру и серийному номеру
+   * 2. Нормализует поиск (убирает ведущие нули)
+   * 3. Возвращает все совпадения для показа в диалоге выбора
+   * 
+   * НЕ ИЗМЕНЯТЬ ЛОГИКУ ПОИСКА БЕЗ ПОЛНОГО ТЕСТИРОВАНИЯ!
+   */
   const searchEquipmentByNumbers = useCallback((searchTerm: string): FoundItem[] => {
     if (!searchTerm.trim()) return [];
 
@@ -126,10 +177,18 @@ const Inventory: React.FC = () => {
     return results;
   }, [equipment]);
 
+  /**
+   * 🚨 КРИТИЧЕСКАЯ ФУНКЦИЯ: addSerial
+   * 
+   * ПРИНЦИП РАБОТЫ:
+   * 1. При множественных совпадениях ВСЕГДА показывается диалог выбора
+   * 2. При одном совпадении проверяется дубликат по инвентарному номеру
+   * 3. Дубликат добавляется только при повторном выборе того же оборудования
+   * 
+   * НЕ ИЗМЕНЯТЬ ЛОГИКУ БЕЗ ПОЛНОГО ТЕСТИРОВАНИЯ!
+   */
   const addSerial = useCallback((searchTerm: string) => {
     if (!searchTerm.trim()) return;
-
-    const normalizedSearch = searchTerm.replace(/^0+/, '');
 
     const found = searchEquipmentByNumbers(searchTerm);
 
@@ -193,6 +252,16 @@ const Inventory: React.FC = () => {
     }
   }, [searchEquipmentByNumbers, rows, addAction]);
 
+  /**
+   * 🚨 КРИТИЧЕСКАЯ ФУНКЦИЯ: handleSelectEquipment
+   * 
+   * ПРИНЦИП РАБОТЫ:
+   * 1. Проверяет дубликат по инвентарному номеру в текущем буфере
+   * 2. При дубликате добавляет как 'duplicate', иначе как 'found'
+   * 3. Логирует действие только для новых элементов
+   * 
+   * НЕ ИЗМЕНЯТЬ ЛОГИКУ БЕЗ ПОЛНОГО ТЕСТИРОВАНИЯ!
+   */
   const handleSelectEquipment = useCallback((selectedItem: FoundItem, searchTerm: string) => {
     // Проверяем, не является ли это дубликатом уже выбранного оборудования
     const isDuplicate = rows.some(row => 
@@ -367,6 +436,17 @@ const Inventory: React.FC = () => {
     users: entities.users?.map(u => u.name) || [],
   }), [statuses, entities]);
 
+  /**
+   * 🚨 КРИТИЧЕСКАЯ ФУНКЦИЯ: handleBulkOperation
+   * 
+   * ПРИНЦИП РАБОТЫ:
+   * 1. Обновляет оборудование в equipmentStorage (основное хранилище)
+   * 2. Обновляет оборудование в буфере (отображение)
+   * 3. Логирует действие и показывает уведомление
+   * 4. Обрабатывает ошибки с уведомлениями
+   * 
+   * НЕ ИЗМЕНЯТЬ ЛОГИКУ БЕЗ ПОЛНОГО ТЕСТИРОВАНИЯ!
+   */
   const handleBulkOperation = useCallback(async (operation: any) => {
     const foundEquipment = getFoundEquipment();
 
@@ -387,43 +467,62 @@ const Inventory: React.FC = () => {
       updates.user = operation.value;
     }
 
-    // Обновляем оборудование в буфере
-    const updatedRows = rows.map(row => {
-      if (row.item) {
-        return {
-          ...row,
-          item: {
-            ...row.item,
-            ...updates,
-          },
-        };
-      }
-      return row;
-    });
-
-    setRows(updatedRows);
-
-    // Добавляем действие в лог
-    addAction({
-      type: 'bulk',
-      description: `Массовое изменение: ${operation.type} для ${foundEquipment.length} позиций`,
-      entityType: 'Инвентаризация',
-      entityId: 'bulk_operation',
-      oldData: { count: foundEquipment.length, operation: 'bulk_update' },
-      newData: { count: foundEquipment.length, operation: 'bulk_update', updates },
-      canUndo: true,
-    });
-
-    // Показываем уведомление
-    if (window.notificationSystem) {
-      window.notificationSystem.addNotification({
-        type: 'success',
-        title: 'Массовое изменение',
-        message: `Обновлено ${foundEquipment.length} позиций`,
+    try {
+      // Обновляем оборудование в equipmentStorage
+      const { updateEquipmentByInventoryNumber } = require('../storage/equipmentStorage');
+      
+      foundEquipment.forEach(equipment => {
+        updateEquipmentByInventoryNumber(equipment.inventoryNumber, updates);
       });
-    }
 
-    setBulkOperationsOpen(false);
+      // Обновляем оборудование в буфере
+      const updatedRows = rows.map(row => {
+        if (row.item) {
+          return {
+            ...row,
+            item: {
+              ...row.item,
+              ...updates,
+            },
+          };
+        }
+        return row;
+      });
+
+      setRows(updatedRows);
+
+      // Добавляем действие в лог
+      addAction({
+        type: 'bulk',
+        description: `Массовое изменение: ${operation.type} для ${foundEquipment.length} позиций`,
+        entityType: 'Инвентаризация',
+        entityId: 'bulk_operation',
+        oldData: { count: foundEquipment.length, operation: 'bulk_update' },
+        newData: { count: foundEquipment.length, operation: 'bulk_update', updates },
+        canUndo: true,
+      });
+
+      // Показываем уведомление
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'success',
+          title: 'Массовое изменение',
+          message: `Обновлено ${foundEquipment.length} позиций`,
+        });
+      }
+
+      setBulkOperationsOpen(false);
+    } catch (error) {
+      console.error('Ошибка при массовом изменении:', error);
+      
+      if (window.notificationSystem) {
+        window.notificationSystem.addNotification({
+          type: 'error',
+          title: 'Ошибка',
+          message: 'Не удалось применить массовые изменения',
+        });
+      }
+    }
   }, [rows, getFoundEquipment, addAction]);
 
   const showBarcode = useCallback((inventoryNumber: string) => {
