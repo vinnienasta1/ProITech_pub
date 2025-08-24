@@ -20,9 +20,12 @@ import {
   Print as PrintIcon,
   Brightness4 as DarkIcon,
   Brightness7 as LightIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const drawerWidth = 280;
 
@@ -30,6 +33,7 @@ const menuItems = [
   { text: 'Дашборд', icon: <DashboardIcon />, path: '/' },
   { text: 'Оборудование', icon: <InventoryIcon />, path: '/equipment' },
   { text: 'Инвентаризация', icon: <InventoryCheckIcon />, path: '/inventory' },
+  { text: 'Пользователи', icon: <PersonIcon />, path: '/users' },
   { text: 'Принтеры', icon: <PrintIcon />, path: '/printers' },
   { text: 'Администрирование', icon: <SettingsIcon />, path: '/administration' },
 ];
@@ -38,6 +42,7 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { themeSettings, toggleTheme } = useTheme();
+  const { isAuthenticated, logout } = useAuth();
 
   return (
     <Drawer
@@ -138,6 +143,27 @@ const Sidebar = () => {
       </List>
 
       <Box sx={{ mt: 'auto', p: 2 }}>
+        {/* Кнопка выхода (только если пользователь аутентифицирован) */}
+        {isAuthenticated && (
+          <ListItemButton
+            onClick={logout}
+            sx={{
+              borderRadius: 2,
+              backgroundColor: 'error.main',
+              color: 'error.contrastText',
+              mb: 2,
+              '&:hover': {
+                backgroundColor: 'error.dark',
+              },
+            }}
+          >
+            <ListItemIcon sx={{ color: 'inherit' }}>
+              <LogoutIcon />
+            </ListItemIcon>
+            <ListItemText primary="Выйти из админки" />
+          </ListItemButton>
+        )}
+        
         <ListItemButton
           onClick={() => navigate('/equipment/new')}
           sx={{

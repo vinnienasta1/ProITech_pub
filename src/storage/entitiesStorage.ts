@@ -70,3 +70,12 @@ const store = createLocalStorage<EntitiesState>('inventory_entities_v2', default
 
 export function getEntities(): EntitiesState { return store.get(); }
 export function saveEntities(next: EntitiesState): void { store.set(next); }
+
+// Удобные функции для получения отдельных сущностей
+export function getUsers(): User[] { return store.get().users; }
+export function getDepartments(): Department[] { return store.get().departments; }
+export function getSuppliers(): Supplier[] { return store.get().suppliers; }
+export function getProjects(): Project[] { return store.get().projects; }
+export function getLocations(): Location[] { return store.get().locations; }
+export function getShelves(): Shelf[] { return store.get().shelves; }
+export function getTypes(): EquipmentType[] { return store.get().types; }

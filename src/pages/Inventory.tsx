@@ -36,7 +36,7 @@ import {
   Paper, 
   TextField, 
   Button, 
-  IconButton,
+  IconButton, 
   Chip, 
   Dialog, 
   DialogTitle, 
@@ -373,7 +373,7 @@ const Inventory: React.FC = () => {
           canUndo: true,
         });
       }
-    } else {
+      } else {
       // Найдено несколько совпадений - всегда показываем диалог выбора
       setSelectionDialog({
         open: true,
@@ -807,9 +807,9 @@ const Inventory: React.FC = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
             Добавить оборудование
-          </Typography>
+      </Typography>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <TextField
+        <TextField
               fullWidth
               placeholder="Введите инв. номер или серийный номер"
               value={inputValue}
@@ -877,7 +877,7 @@ const Inventory: React.FC = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h5" sx={{ fontWeight: 600 }}>
               Буфер инвентаризации
-            </Typography>
+                </Typography>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <Button
                 variant="outlined"
@@ -939,9 +939,9 @@ const Inventory: React.FC = () => {
                 background: 'linear-gradient(180deg, #4caf50 0%, rgba(76, 175, 80, 0.3) 100%)',
                 border: '1px solid #4caf50'
               }} />
-              <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary">
                 Найдено: {rows.filter(r => r.status === 'found').length}
-              </Typography>
+                  </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Box sx={{ 
@@ -1066,12 +1066,12 @@ const Inventory: React.FC = () => {
                           ) : key === 'department' && !row.item ? (
                             <Typography variant="body2" color="text.secondary">-</Typography>
                           ) : key === 'name' && row.item ? (
-                            <Typography 
-                              variant="body2" 
-                              sx={{ 
-                                color: 'primary.main',
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: 'primary.main',
                                 cursor: 'pointer',
-                                textDecoration: 'underline',
+                      textDecoration: 'underline',
                                 fontWeight: 500,
                                 '&:hover': { 
                                   color: 'primary.dark',
@@ -1081,7 +1081,7 @@ const Inventory: React.FC = () => {
                               onClick={() => navigate(`/equipment/${row.item!.inventoryNumber}`)}
                             >
                               {row.item.name}
-                            </Typography>
+                  </Typography>
                           ) : key === 'name' && !row.item ? (
                             <Typography variant="body2" color="text.secondary">Не найдено</Typography>
                           ) : key === 'status' && row.item ? (
@@ -1144,8 +1144,8 @@ const Inventory: React.FC = () => {
                       <TableCell sx={{ py: 1 }}>
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           {row.status === 'found' && row.item && (
-                            <IconButton
-                              size="small"
+                  <IconButton
+                    size="small"
                               onClick={() => showBarcode(row.item!.inventoryNumber)}
                               sx={{ 
                                 color: 'primary.main',
@@ -1158,10 +1158,10 @@ const Inventory: React.FC = () => {
                               }}
                             >
                               <QrCodeIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                          <IconButton
-                            size="small"
+                  </IconButton>
+                )}
+                <IconButton 
+                  size="small"
                             onClick={() => removeRow(row.id)}
                             sx={{ 
                               color: 'error.main',
@@ -1174,11 +1174,11 @@ const Inventory: React.FC = () => {
                             }}
                           >
                             <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
+                </IconButton>
+              </Box>
                       </TableCell>
                     </TableRow>
-                  ))}
+          ))}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -1232,7 +1232,7 @@ const Inventory: React.FC = () => {
                 </ListItem>
               ))}
             </List>
-          </DialogContent>
+        </DialogContent>
           <DialogActions sx={{ p: 3, pt: 0 }}>
             <Button 
               onClick={() => setSelectionDialog({ ...selectionDialog, open: false })}
@@ -1241,8 +1241,8 @@ const Inventory: React.FC = () => {
             >
               Закрыть
             </Button>
-          </DialogActions>
-        </Dialog>
+        </DialogActions>
+      </Dialog>
       )}
 
       {/* Массовые операции */}

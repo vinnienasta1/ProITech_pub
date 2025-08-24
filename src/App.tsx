@@ -7,11 +7,13 @@ import EquipmentForm from './pages/EquipmentForm';
 import EquipmentDetail from './pages/EquipmentDetail';
 import Administration from './pages/Administration';
 import Inventory from './pages/Inventory';
+import Users from './pages/Users';
 import Printers from './pages/Printers';
 import ActionLog from './components/ActionLog';
 import { ActionLogProvider, useActionLog } from './contexts/ActionLogContext';
 import { NotificationContext } from './contexts/NotificationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider } from './contexts/AuthContext';
 import Sidebar from './components/Sidebar';
 
 // Компонент для отображения ActionLog
@@ -69,36 +71,41 @@ function App() {
   return (
     <ThemeProvider>
       <CssBaseline />
-      <ActionLogProvider>
-        <NotificationContext.Provider value={notificationContextValue}>
-          <Router>
-            <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-              <Sidebar />
-              <Box
-                component="main"
-                sx={{
-                  flexGrow: 1,
-                  p: 3,
-                  backgroundColor: 'background.default',
-                  minHeight: '100vh',
-                }}
-              >
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/equipment" element={<EquipmentList />} />
-                  <Route path="/equipment/new" element={<EquipmentForm />} />
-                  <Route path="/equipment/edit/:inventoryNumber" element={<EquipmentForm />} />
-                  <Route path="/equipment/:inventoryNumber" element={<EquipmentDetail />} />
-                  <Route path="/inventory" element={<Inventory />} />
-                  <Route path="/printers" element={<Printers />} />
-                  <Route path="/administration" element={<Administration />} />
-                </Routes>
+      <AuthProvider>
+        <ActionLogProvider>
+          <NotificationContext.Provider value={notificationContextValue}>
+            <Router>
+              <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                <Sidebar />
+                <Box
+                  component="main"
+                  sx={{
+                    flexGrow: 1,
+                    p: 3,
+                    backgroundColor: 'background.default',
+                    minHeight: '100vh',
+                  }}
+                >
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/equipment" element={<EquipmentList />} />
+                    <Route path="/equipment/new" element={<EquipmentForm />} />
+                    <Route path="/equipment/edit/:inventoryNumber" element={<EquipmentForm />} />
+                    <Route path="/equipment/:inventoryNumber" element={<EquipmentDetail />} />
+                    <Route path="/inventory" element={<Inventory />} />
+                    <Route path="/users" element={<Users />} />
+                    <Route path="/admin" element={<Inventory />} />
+                    <Route path="/users" element={<Users />} />
+                    <Route path="/printers" element={<Printers />} />
+                    <Route path="/administration" element={<Administration />} />
+                  </Routes>
+                </Box>
+                <ActionLogWrapper />
               </Box>
-              <ActionLogWrapper />
-            </Box>
-          </Router>
-        </NotificationContext.Provider>
-      </ActionLogProvider>
+            </Router>
+          </NotificationContext.Provider>
+        </ActionLogProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

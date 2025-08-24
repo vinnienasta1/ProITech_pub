@@ -93,6 +93,8 @@ const EquipmentList = () => {
   const [bulkActionValue, setBulkActionValue] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // Ключ для принудительного обновления
+  const [userDetailsOpen, setUserDetailsOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [columnOrder, setColumnOrder] = useState<EquipmentColumnKey[]>([
     'invNumber', 'type', 'name', 'department', 'status', 'location', 'rack', 'manufacturer', 'model', 'serialNumber', 'purchaseDate', 'warrantyMonths', 'cost', 'comment', 'supplier', 'project', 'user', 'invoiceNumber', 'contractNumber'
   ]);
@@ -291,7 +293,7 @@ const EquipmentList = () => {
             case 'lte':
               matches = fieldDate <= conditionDate;
               break;
-            default:
+      default:
               matches = true;
           }
         }
@@ -425,6 +427,28 @@ const EquipmentList = () => {
         ? prev.filter(item => item.id !== equipment.id)
         : [...prev, equipment]
     );
+  };
+
+  const getUserEquipment = (userName: string) => {
+    return equipmentData.filter((item: Equipment) => item.user === userName);
+  };
+
+  const getUserStats = (userName: string) => {
+    const userEquipment = getUserEquipment(userName);
+    const total = userEquipment.length;
+    const active = userEquipment.filter((item: Equipment) => item.status === 'Активно').length;
+    const repair = userEquipment.filter((item: Equipment) => item.status === 'Ремонт').length;
+    const maintenance = userEquipment.filter((item: Equipment) => item.status === 'На обслуживании').length;
+    
+    return { total, active, repair, maintenance };
+  };
+
+  const handleUserClick = (userName: string) => {
+    const user = entities?.users?.find((u: any) => u.name === userName);
+    if (user) {
+      setSelectedUser(user);
+      setUserDetailsOpen(true);
+    }
   };
 
   const handleBulkOperation = async (operation: any) => {
@@ -922,10 +946,10 @@ const EquipmentList = () => {
                 {/* Условия для текстовых полей */}
                 {['name', 'type', 'location', 'status', 'manufacturer', 'model', 'serialNumber', 'department', 'rack', 'user', 'supplier', 'project', 'invoiceNumber', 'contractNumber', 'comment'].includes(c.field) && (
                   <>
-                    <option value="eq">Равно</option>
-                    <option value="neq">Не равно</option>
-                    <option value="contains">Содержит</option>
-                    <option value="ncontains">Не содержит</option>
+                <option value="eq">Равно</option>
+                <option value="neq">Не равно</option>
+                <option value="contains">Содержит</option>
+                <option value="ncontains">Не содержит</option>
                   </>
                 )}
                 
@@ -1250,7 +1274,7 @@ const EquipmentList = () => {
                   size="small"
                   variant="outlined"
                   color="secondary"
-                  onClick={() => {
+            onClick={() => {
                     setSearchTerm('');
                     setConditions([{ field: 'name', op: 'contains', value: '' }]);
                     setPage(0);
@@ -1375,10 +1399,25 @@ const EquipmentList = () => {
                         {key === 'comment' && equipment.comment}
                         {key === 'supplier' && equipment.supplier}
                         {key === 'project' && equipment.project}
-                        {key === 'user' && equipment.user}
+                        {key === 'user' && equipment.user && (
+                          <Typography
+                            component="span"
+                            sx={{
+                              color: 'primary.main',
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                              '&:hover': {
+                                color: 'primary.dark',
+                              }
+                            }}
+                            onClick={() => handleUserClick(equipment.user!)}
+                          >
+                            {equipment.user}
+                          </Typography>
+                        )}
                         {key === 'invoiceNumber' && equipment.invoiceNumber}
                         {key === 'contractNumber' && equipment.contractNumber}
-                      </TableCell>
+                    </TableCell>
                     ))}
                   </TableRow>
                 ))}
@@ -1514,6 +1553,220 @@ const EquipmentList = () => {
             disabled={!bulkActionField || (!bulkActionOperation && bulkActionOperation !== 'clear') || (!bulkActionValue && bulkActionOperation !== 'clear')}
           >
             Применить
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Диалог с деталями пользователя */}
+      <Dialog 
+        open={userDetailsOpen} 
+        onClose={() => setUserDetailsOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Typography variant="h6">
+              {selectedUser?.name}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent>
+          {selectedUser && (
+            <Box>
+              {/* Информация о пользователе */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3, mb: 3 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                    Информация о пользователе
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Typography variant="body2">
+                      <strong>ФИО:</strong> {selectedUser.name}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Email:</strong> {selectedUser.email}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Департамент:</strong> {selectedUser.department}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Должность:</strong> {selectedUser.position}
+                    </Typography>
+                    {selectedUser.phone && (
+                      <Typography variant="body2">
+                        <strong>Телефон:</strong> {selectedUser.phone}
+                      </Typography>
+                    )}
+                    {selectedUser.location && (
+                      <Typography variant="body2">
+                        <strong>Местоположение:</strong> {selectedUser.location}
+                      </Typography>
+                    )}
+                  </Box>
+                </Paper>
+                
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                    Статистика по технике
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2">Всего единиц:</Typography>
+                      <Chip label={getUserStats(selectedUser.name).total} color="primary" />
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2">Активная:</Typography>
+                      <Chip label={getUserStats(selectedUser.name).active} color="success" />
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2">В ремонте:</Typography>
+                      <Chip label={getUserStats(selectedUser.name).repair} color="warning" />
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2">На обслуживании:</Typography>
+                      <Chip label={getUserStats(selectedUser.name).maintenance} color="info" />
+                    </Box>
+                  </Box>
+                </Paper>
+              </Box>
+
+              {/* Список выданной техники */}
+              <Paper variant="outlined" sx={{ mt: 3 }}>
+                <Box sx={{ p: 3 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Выданная техника
+                    </Typography>
+                    {getUserEquipment(selectedUser.name).length > 0 && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          const userEquipment = getUserEquipment(selectedUser.name);
+                          const equipmentText = userEquipment.map((item: Equipment) => 
+                            `• ${item.name} (${item.type})\n  Производитель: ${item.manufacturer} ${item.model}\n  Инв. №: ${item.inventoryNumber}\n  Серийный: ${item.serialNumber}\n  Статус: ${item.status}`
+                          ).join('\n\n');
+                          
+                          const fullText = `Техника пользователя: ${selectedUser.name}\n\n${equipmentText}`;
+                          
+                          navigator.clipboard.writeText(fullText).then(() => {
+                            addNotification({
+                              type: 'success',
+                              title: 'Скопировано',
+                              message: 'Данные о технике скопированы в буфер обмена'
+                            });
+                          }).catch(() => {
+                            addNotification({
+                              type: 'error',
+                              title: 'Ошибка',
+                              message: 'Не удалось скопировать данные'
+                            });
+                          });
+                        }}
+                        sx={{ 
+                          minWidth: 'auto',
+                          px: 2,
+                          py: 0.5,
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        Скопировать данные о технике
+                      </Button>
+                    )}
+                  </Box>
+                  
+                  {getUserEquipment(selectedUser.name).length > 0 ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {getUserEquipment(selectedUser.name).map((item: Equipment) => (
+                        <Box 
+                          key={item.id} 
+                          sx={{ 
+                            p: 2.5, 
+                            border: '1px solid', 
+                            borderColor: 'divider', 
+                            borderRadius: 2,
+                            backgroundColor: 'background.paper',
+                            transition: 'all 0.2s ease-in-out',
+                            '&:hover': {
+                              borderColor: 'primary.main',
+                              backgroundColor: 'action.hover',
+                              transform: 'translateY(-1px)',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                            }
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                {item.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                {item.type} • {item.manufacturer} {item.model}
+                              </Typography>
+                            </Box>
+                            <Chip 
+                              label={item.status} 
+                              size="small" 
+                              color={getStatusColor(item.status) as any}
+                              sx={{ ml: 1, flexShrink: 0 }}
+                            />
+                          </Box>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, fontSize: '0.75rem' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Инв. №:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                                {item.inventoryNumber}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Серийный:
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                                {item.serialNumber}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Box sx={{ 
+                      textAlign: 'center', 
+                      py: 4,
+                      border: '2px dashed',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      backgroundColor: 'action.hover'
+                    }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Пользователю не выдана техника
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Paper>
+            </Box>
+          )}
+        </DialogContent>
+        
+        <DialogActions>
+          <Button onClick={() => setUserDetailsOpen(false)} variant="outlined">
+            Закрыть
+          </Button>
+          <Button 
+            variant="contained" 
+            color="primary"
+            onClick={() => {
+              setUserDetailsOpen(false);
+              navigate('/users');
+            }}
+          >
+            Перейти к пользователям
           </Button>
         </DialogActions>
       </Dialog>

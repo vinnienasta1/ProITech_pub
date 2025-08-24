@@ -31,6 +31,7 @@ import {
   History as HistoryIcon,
   Add as AddIcon,
   Build as BuildIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { Equipment } from '../types/equipment';
 import { getEquipment, updateEquipmentByInventoryNumber } from '../storage/equipmentStorage';
@@ -40,7 +41,7 @@ import { useActionLog } from '../contexts/ActionLogContext';
 
 const EquipmentDetail: React.FC = () => {
   const { inventoryNumber } = useParams<{ inventoryNumber: string }>();
-  const { addAction, actions } = useActionLog();
+  const { addAction, actions, registerUndoHandler, unregisterUndoHandler } = useActionLog();
 
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [editData, setEditData] = useState<Equipment | null>(null);
@@ -88,6 +89,35 @@ const EquipmentDetail: React.FC = () => {
       setHasChanges(changed);
     }
   }, [equipment, editData]);
+
+  // Регистрируем обработчик отмены для оборудования
+  useEffect(() => {
+    if (inventoryNumber) {
+      registerUndoHandler('Оборудование', (action) => {
+        if (action.oldData && action.newData) {
+          try {
+            // Восстанавливаем старые данные
+            const updatedEquipment = updateEquipmentByInventoryNumber(inventoryNumber, action.oldData);
+            if (updatedEquipment) {
+              setEquipment(updatedEquipment);
+              setEditData({ ...updatedEquipment });
+              // Обновляем записи об обслуживании
+              setMaintenanceRecords((updatedEquipment as any).maintenanceRecords || []);
+              return true; // Успешно отменено
+            }
+          } catch (error) {
+            console.error('Ошибка при отмене действия:', error);
+          }
+        }
+        return false; // Не удалось отменить
+      });
+
+      // Очищаем обработчик при размонтировании
+      return () => {
+        unregisterUndoHandler('Оборудование');
+      };
+    }
+  }, [inventoryNumber, registerUndoHandler, unregisterUndoHandler]);
 
   const handleInputChange = useCallback((field: keyof Equipment, value: any) => {
     if (editData) {
@@ -177,6 +207,49 @@ const EquipmentDetail: React.FC = () => {
         setEditData(prev => prev ? { ...prev, maintenanceRecords: updatedRecords } : null);
       }
       
+      // Сразу сохраняем изменения в хранилище
+      if (inventoryNumber && editData) {
+        try {
+          const updatedEquipment = { ...editData, maintenanceRecords: updatedRecords };
+          updateEquipmentByInventoryNumber(inventoryNumber, updatedEquipment);
+          
+          // Обновляем локальное состояние
+          setEquipment(updatedEquipment);
+          setEditData(updatedEquipment);
+          setHasChanges(false);
+          
+          // Логируем добавление записи об обслуживании
+          addAction({
+            type: 'update',
+            description: `Обслуживание "${editData?.name}" (${editData?.inventoryNumber}). Работа: ${newMaintenanceRecord.work}, исполнитель: ${newMaintenanceRecord.performedBy}`,
+            entityType: 'Оборудование',
+            entityId: editData?.inventoryNumber || '',
+            oldData: { ...editData, maintenanceRecords },
+            newData: updatedEquipment,
+            canUndo: true,
+            user: editData?.user || 'Неизвестный пользователь'
+          });
+          
+          // Показываем уведомление об успехе
+          if (window.notificationSystem) {
+            window.notificationSystem.addNotification({
+              type: 'success',
+              title: 'Сохранено',
+              message: 'Запись об обслуживании добавлена и сохранена',
+            });
+          }
+        } catch (error) {
+          console.error('Ошибка при сохранении записи об обслуживании:', error);
+          if (window.notificationSystem) {
+            window.notificationSystem.addNotification({
+              type: 'error',
+              title: 'Ошибка',
+              message: 'Не удалось сохранить запись об обслуживании',
+            });
+          }
+        }
+      }
+      
       // Сбрасываем форму
       setNewMaintenanceRecord({
         date: new Date().toISOString().split('T')[0],
@@ -187,11 +260,63 @@ const EquipmentDetail: React.FC = () => {
       });
       setMaintenanceDialogOpen(false);
     }
-  }, [newMaintenanceRecord, maintenanceRecords, editData]);
+  }, [newMaintenanceRecord, maintenanceRecords, editData, addAction, inventoryNumber]);
 
   const handleMaintenanceInputChange = useCallback((field: string, value: string) => {
     setNewMaintenanceRecord(prev => ({ ...prev, [field]: value }));
   }, []);
+
+  // Функция удаления записи об обслуживании
+  const handleDeleteMaintenanceRecord = useCallback((recordId: string) => {
+    if (inventoryNumber && editData) {
+      try {
+        const updatedRecords = maintenanceRecords.filter(record => record.id !== recordId);
+        const updatedEquipment = { ...editData, maintenanceRecords: updatedRecords };
+        
+        // Сохраняем в хранилище
+        updateEquipmentByInventoryNumber(inventoryNumber, updatedEquipment);
+        
+        // Обновляем локальное состояние
+        setMaintenanceRecords(updatedRecords);
+        setEquipment(updatedEquipment);
+        setEditData(updatedEquipment);
+        setHasChanges(false);
+        
+        // Логируем удаление
+        const deletedRecord = maintenanceRecords.find(record => record.id === recordId);
+        if (deletedRecord) {
+          addAction({
+            type: 'update',
+            description: `Удалена запись об обслуживании "${editData.name}" (${editData.inventoryNumber}). Работа: ${deletedRecord.work}`,
+            entityType: 'Оборудование',
+            entityId: editData.inventoryNumber,
+            oldData: { ...editData, maintenanceRecords },
+            newData: updatedEquipment,
+            canUndo: true,
+            user: editData.user || 'Неизвестный пользователь'
+          });
+        }
+        
+        // Показываем уведомление
+        if (window.notificationSystem) {
+          window.notificationSystem.addNotification({
+            type: 'success',
+            title: 'Удалено',
+            message: 'Запись об обслуживании удалена',
+          });
+        }
+      } catch (error) {
+        console.error('Ошибка при удалении записи об обслуживании:', error);
+        if (window.notificationSystem) {
+          window.notificationSystem.addNotification({
+            type: 'error',
+            title: 'Ошибка',
+            message: 'Не удалось удалить запись об обслуживании',
+          });
+        }
+      }
+    }
+  }, [inventoryNumber, editData, maintenanceRecords, addAction]);
 
   if (!equipment || !editData) {
     return (
@@ -599,6 +724,7 @@ const EquipmentDetail: React.FC = () => {
                   <TableCell>Ссылка на заявку</TableCell>
                   <TableCell>Выполнил</TableCell>
                   <TableCell>Комментарий</TableCell>
+                  <TableCell>Действия</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -642,6 +768,17 @@ const EquipmentDetail: React.FC = () => {
                       ) : (
                         '-'
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip title="Удалить запись">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteMaintenanceRecord(record.id)}
+                          color="error"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -704,7 +841,35 @@ const EquipmentDetail: React.FC = () => {
                 action.entityId === inventoryNumber
               );
               
-              if (equipmentActions.length === 0) {
+              // Создаем объединенную историю: действия + записи об обслуживании
+              const combinedHistory: Array<{
+                type: 'action' | 'maintenance';
+                data: any;
+                timestamp: Date;
+              }> = [];
+              
+              // Добавляем действия из ActionLog
+              equipmentActions.forEach(action => {
+                combinedHistory.push({
+                  type: 'action',
+                  data: action,
+                  timestamp: action.timestamp
+                });
+              });
+              
+              // Добавляем записи об обслуживании
+              maintenanceRecords.forEach(record => {
+                combinedHistory.push({
+                  type: 'maintenance',
+                  data: record,
+                  timestamp: new Date(record.date)
+                });
+              });
+              
+              // Сортируем по времени (новые сверху)
+              combinedHistory.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+              
+              if (combinedHistory.length === 0) {
                 return (
                   <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
                     История изменений будет отображаться здесь после первого сохранения
@@ -714,37 +879,82 @@ const EquipmentDetail: React.FC = () => {
               
               return (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {equipmentActions.map((action) => (
-                    <Box 
-                      key={action.id} 
-                      sx={{ 
-                        p: 2, 
-                        border: '1px solid', 
-                        borderColor: 'divider', 
-                        borderRadius: 1,
-                        backgroundColor: 'background.paper'
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {action.description}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {action.timestamp.toLocaleString('ru-RU')}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Тип действия: {action.type === 'create' ? 'Создание' : 
-                                       action.type === 'update' ? 'Изменение' : 
-                                       action.type === 'delete' ? 'Удаление' : action.type}
-                      </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Изменил: {action.user || 'Система'}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
+                  {combinedHistory.map((item, index) => {
+                    if (item.type === 'action') {
+                      const action = item.data;
+                      return (
+                        <Box 
+                          key={`action-${action.id}`} 
+                          sx={{ 
+                            p: 2, 
+                            border: '1px solid', 
+                            borderColor: 'divider', 
+                            borderRadius: 1,
+                            backgroundColor: 'background.paper'
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {action.description}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {action.timestamp.toLocaleString('ru-RU')}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Тип действия: {action.type === 'create' ? 'Создание' : 
+                                           action.type === 'update' ? 'Изменение' : 
+                                           action.type === 'delete' ? 'Удаление' : action.type}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Изменил: {action.user || 'Система'}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      );
+                    } else if (item.type === 'maintenance') {
+                      const record = item.data;
+                      return (
+                        <Box 
+                          key={`maintenance-${record.id}`} 
+                          sx={{ 
+                            p: 2, 
+                            border: '1px solid', 
+                            borderColor: 'success.main', 
+                            borderRadius: 1,
+                            backgroundColor: 'success.light',
+                            opacity: 0.9
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500, color: 'success.dark' }}>
+                              Обслуживание: {record.work}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(record.date).toLocaleDateString('ru-RU')}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Исполнитель: {record.performedBy}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Тип: Обслуживание
+                            </Typography>
+                          </Box>
+                          {record.comment && (
+                            <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'success.light' }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Комментарий: {record.comment}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    }
+                    return null;
+                  })}
                 </Box>
               );
             })()}

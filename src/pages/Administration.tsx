@@ -28,6 +28,7 @@ import {
   Switch,
   FormControlLabel,
   Slider,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,12 +44,16 @@ import {
   Storage as RackIcon,
   Palette as PaletteIcon,
   VpnKey as LdapIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import { getStatuses, saveStatuses, StatusItem } from '../storage/statusStorage';
 import { getEntities, saveEntities } from '../storage/entitiesStorage';
 import { getEquipment } from '../storage/equipmentStorage';
+import { getAdminPassword, changeAdminPassword } from '../storage/adminPassword';
 import ColorPicker from '../components/ColorPicker';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -101,9 +106,10 @@ function TabPanel(props: TabPanelProps) {
 
 const Administration = () => {
   const { themeSettings, updateTheme } = useTheme();
+  const { isAuthenticated, login, logout } = useAuth();
   const [tabValue, setTabValue] = useState(0);
   const [openDialog, setOpenDialog] = useState(false);
-  const [dialogType, setDialogType] = useState<'equipmentType' | 'department' | 'status' | 'supplier' | 'project' | 'location' | 'shelf'>('equipmentType');
+  const [dialogType, setDialogType] = useState<'equipmentType' | 'department' | 'status' | 'supplier' | 'project' | 'location' | 'shelf' | 'user'>('equipmentType');
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
   
@@ -125,11 +131,22 @@ const Administration = () => {
   });
   const [statuses, setStatuses] = useState<StatusItem[]>([]);
   const [entities, setEntities] = useState<any>(null);
+  const [adminPassword, setAdminPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<boolean>(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
 
   useEffect(() => {
     try {
       setStatuses(getStatuses());
       setEntities(getEntities());
+      
+      // Загружаем мастер-пароль
+      const adminPass = getAdminPassword();
+      setAdminPassword(adminPass.password);
       
       // Убираем загрузку настроек темы, так как теперь используем контекст
       // const savedTheme = localStorage.getItem('theme_settings');
@@ -185,6 +202,40 @@ const Administration = () => {
     setOpenDialog(true);
   };
 
+  const handlePasswordChange = () => {
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError('Новые пароли не совпадают');
+      setPasswordChangeSuccess(false);
+      return;
+    }
+    
+    if (newPassword.length < 3) {
+      setPasswordChangeError('Новый пароль должен содержать минимум 3 символа');
+      setPasswordChangeSuccess(false);
+      return;
+    }
+    
+    if (changeAdminPassword(adminPassword, newPassword)) {
+      setAdminPassword(newPassword);
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordChangeSuccess(true);
+      setPasswordChangeError('');
+    } else {
+      setPasswordChangeError('Неверный текущий пароль');
+      setPasswordChangeSuccess(false);
+    }
+  };
+
+  const handleLogin = () => {
+    if (login(loginPassword)) {
+      setLoginPassword('');
+      setLoginError('');
+    } else {
+      setLoginError('Неверный пароль');
+    }
+  };
+
   const handleDelete = (type: typeof dialogType, id: number) => {
     if (type === 'status') {
       deleteStatus(id);
@@ -194,7 +245,8 @@ const Administration = () => {
       type === 'department' ? 'departments' :
       type === 'supplier' ? 'suppliers' :
       type === 'project' ? 'projects' :
-      type === 'shelf' ? 'shelves' : 'locations';
+      type === 'shelf' ? 'shelves' :
+      type === 'user' ? 'users' : 'locations';
     const next = { ...entities, [key]: (entities as any)[key].filter((x: any) => x.id !== id) };
     setEntities(next);
     saveEntities(next);
@@ -239,7 +291,8 @@ const Administration = () => {
       dialogType === 'department' ? 'departments' :
       dialogType === 'supplier' ? 'suppliers' :
       dialogType === 'project' ? 'projects' :
-      dialogType === 'shelf' ? 'shelves' : 'locations';
+      dialogType === 'shelf' ? 'shelves' :
+      dialogType === 'user' ? 'users' : 'locations';
     
     const list = (entities as any)[key] as any[];
     let updated: any[];
@@ -250,7 +303,8 @@ const Administration = () => {
                        dialogType === 'department' ? 'name' :
                        dialogType === 'supplier' ? 'name' :
                        dialogType === 'project' ? 'name' :
-                       dialogType === 'shelf' ? 'name' : 'name';
+                       dialogType === 'shelf' ? 'name' :
+                       dialogType === 'user' ? 'name' : 'name';
       
       if (editingItem[nameField] !== formData[nameField]) {
         const affectedCount = checkAffectedItems(dialogType, editingItem[nameField], formData[nameField]);
@@ -438,15 +492,79 @@ const Administration = () => {
     );
   }
 
+  // Если пользователь не аутентифицирован, показываем форму входа
+  if (!isAuthenticated) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '50vh',
+        flexDirection: 'column',
+        gap: 3
+      }}>
+        <Typography variant="h4" component="h1" sx={{ mb: 2, fontWeight: 600 }}>
+          Вход в админку
+        </Typography>
+        
+        <Paper sx={{ p: 4, maxWidth: 400, width: '100%' }}>
+          <Typography variant="h6" sx={{ mb: 3, textAlign: 'center' }}>
+            Введите мастер-пароль
+          </Typography>
+          
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <TextField
+              fullWidth
+              label="Мастер-пароль"
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="Введите пароль"
+              error={!!loginError}
+              helperText={loginError}
+              onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+            />
+            
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleLogin}
+              disabled={!loginPassword}
+              size="large"
+            >
+              Войти
+            </Button>
+          </Box>
+          
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block', textAlign: 'center' }}>
+            По умолчанию: 1
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
+
   return (
     <Box>
-      <Typography variant="h4" component="h1" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-        <SettingsIcon sx={{ mr: 2, color: 'primary.main' }} />
-        Администрирование
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+          <SettingsIcon sx={{ mr: 2, color: 'primary.main' }} />
+          Администрирование
+        </Typography>
+        
+        <Button
+          variant="outlined"
+          color="secondary"
+          onClick={logout}
+          startIcon={<LogoutIcon />}
+        >
+          Выйти
+        </Button>
+      </Box>
 
       <Paper sx={{ width: '100%' }}>
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="admin tabs">
+          <Tab label="Основное" icon={<SettingsIcon />} iconPosition="start" />
           <Tab label="Типы техники" icon={<CategoryIcon />} iconPosition="start" />
           <Tab label="Департаменты" icon={<BusinessIcon />} iconPosition="start" />
           <Tab label="Статусы" icon={<StatusIcon />} iconPosition="start" />
@@ -454,12 +572,77 @@ const Administration = () => {
           <Tab label="Проекты" icon={<ProjectIcon />} iconPosition="start" />
           <Tab label="Местоположения" icon={<LocationIcon />} iconPosition="start" />
           <Tab label="Стеллажи" icon={<RackIcon />} iconPosition="start" />
+          <Tab label="Пользователи" icon={<PersonIcon />} iconPosition="start" />
           <Tab label="LDAP" icon={<LdapIcon />} iconPosition="start" />
           <Tab label="Внешний вид" icon={<PaletteIcon />} iconPosition="start" />
         </Tabs>
 
-        {/* Типы техники */}
+        {/* Основное */}
         <TabPanel value={tabValue} index={0}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5" component="h2">
+              Основные настройки
+            </Typography>
+          </Box>
+          
+          {/* Изменение мастер-пароля */}
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+              Изменение мастер-пароля
+            </Typography>
+            
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 3 }}>
+              <TextField
+                fullWidth
+                label="Текущий пароль"
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                placeholder="Введите текущий пароль"
+              />
+              <Box />
+              <TextField
+                fullWidth
+                label="Новый пароль"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Введите новый пароль"
+                error={!!passwordChangeError}
+                helperText={passwordChangeError}
+              />
+              <TextField
+                fullWidth
+                label="Подтверждение пароля"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Повторите новый пароль"
+                error={!!passwordChangeError}
+                helperText={passwordChangeError}
+              />
+            </Box>
+            
+            {passwordChangeSuccess && (
+              <Alert severity="success" sx={{ mt: 2 }}>
+                Пароль успешно изменен!
+              </Alert>
+            )}
+            
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+              <Button
+                variant="contained"
+                onClick={handlePasswordChange}
+                disabled={!adminPassword || !newPassword || !confirmPassword}
+              >
+                Изменить пароль
+              </Button>
+            </Box>
+          </Paper>
+        </TabPanel>
+
+        {/* Типы техники */}
+        <TabPanel value={tabValue} index={1}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Типы техники</Typography>
             <Button
@@ -504,7 +687,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* Департаменты */}
-        <TabPanel value={tabValue} index={1}>
+        <TabPanel value={tabValue} index={2}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Департаменты</Typography>
             <Button
@@ -539,7 +722,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* Статусы */}
-        <TabPanel value={tabValue} index={2}>
+        <TabPanel value={tabValue} index={3}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Статусы оборудования</Typography>
             <Button
@@ -579,7 +762,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* Поставщики */}
-        <TabPanel value={tabValue} index={3}>
+        <TabPanel value={tabValue} index={4}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Поставщики</Typography>
             <Button
@@ -614,7 +797,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* Проекты */}
-        <TabPanel value={tabValue} index={4}>
+        <TabPanel value={tabValue} index={5}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Проекты</Typography>
             <Button
@@ -655,7 +838,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* Местоположения */}
-        <TabPanel value={tabValue} index={5}>
+        <TabPanel value={tabValue} index={6}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Местоположения</Typography>
             <Button
@@ -686,7 +869,7 @@ const Administration = () => {
           </List>
         </TabPanel>
         {/* Стеллажи */}
-        <TabPanel value={tabValue} index={6}>
+        <TabPanel value={tabValue} index={7}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Стеллажи</Typography>
             <Button
@@ -717,8 +900,43 @@ const Administration = () => {
           </List>
         </TabPanel>
 
+        {/* Пользователи */}
+        <TabPanel value={tabValue} index={11}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Пользователи</Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleAdd('user')}
+            >
+              Добавить пользователя
+            </Button>
+          </Box>
+          <List>
+            {entities?.users?.map((user: any) => (
+              <React.Fragment key={user.id}>
+                <ListItem>
+                  <ListItemText
+                    primary={user.name}
+                    secondary={`${user.email} | ${user.department} | ${user.position}`}
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton onClick={() => handleEdit('user', user)} size="small">
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete('user', user.id)} size="small" color="error">
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
+        </TabPanel>
+
         {/* TabPanel for LDAP */}
-        <TabPanel value={tabValue} index={7}>
+        <TabPanel value={tabValue} index={10}>
           <Typography variant="h6" sx={{ mb: 3 }}>Настройки LDAP</Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -808,7 +1026,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* TabPanel for Appearance */}
-        <TabPanel value={tabValue} index={8}>
+        <TabPanel value={tabValue} index={9}>
           <Typography variant="h6" sx={{ mb: 3 }}>Настройки внешнего вида</Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -925,6 +1143,7 @@ const Administration = () => {
             dialogType === 'supplier' ? 'поставщика' :
             dialogType === 'project' ? 'проект' :
             dialogType === 'shelf' ? 'стеллаж' :
+            dialogType === 'user' ? 'пользователя' :
             'местоположение'
           }
         </DialogTitle>
@@ -1104,6 +1323,61 @@ const Administration = () => {
                 label="Название стеллажа"
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </Box>
+          )}
+
+          {dialogType === 'user' && (
+            <Box sx={{ pt: 2 }}>
+              <TextField
+                fullWidth
+                label="ФИО пользователя"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={formData.email || ''}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Департамент</InputLabel>
+                <Select
+                  value={formData.department || ''}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  label="Департамент"
+                >
+                  {entities?.departments?.map((dept: any) => (
+                    <MenuItem key={dept.id} value={dept.name}>
+                      {dept.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                label="Должность"
+                value={formData.position || ''}
+                onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Телефон"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Местоположение"
+                value={formData.location || ''}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                placeholder="Например: Офис ПРМ, Кабинет 101"
               />
             </Box>
           )}
