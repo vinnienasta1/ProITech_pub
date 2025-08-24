@@ -60,7 +60,6 @@ const Inventory: React.FC = () => {
   
   const [inputValue, setInputValue] = useState('');
   const [rows, setRows] = useState<BufferRow[]>([]);
-  const [foundItems, setFoundItems] = useState<Record<string, any>>({});
   const [selectionDialog, setSelectionDialog] = useState<{
     open: boolean;
     items: FoundItem[];
@@ -81,14 +80,6 @@ const Inventory: React.FC = () => {
     const bufferData = getInventoryBuffer();
     if (bufferData.length > 0) {
       setRows(bufferData);
-      // Восстанавливаем foundItems из буфера
-      const restoredFoundItems: Record<string, any> = {};
-      bufferData.forEach(row => {
-        if (row.item) {
-          restoredFoundItems[row.serial] = row.item;
-        }
-      });
-      setFoundItems(restoredFoundItems);
     }
   }, []);
 
@@ -139,20 +130,6 @@ const Inventory: React.FC = () => {
     if (!searchTerm.trim()) return;
 
     const normalizedSearch = searchTerm.replace(/^0+/, '');
-    const keySerial = normalizedSearch;
-
-    // Проверяем, не является ли это дубликатом
-    if (keySerial in foundItems) {
-      const newRow: BufferRow = {
-        id: Date.now().toString(),
-        serial: searchTerm,
-        status: 'duplicate',
-        item: foundItems[keySerial],
-      };
-      setRows(prev => [...prev, newRow]);
-      setInputValue('');
-      return;
-    }
 
     const found = searchEquipmentByNumbers(searchTerm);
 
@@ -168,67 +145,94 @@ const Inventory: React.FC = () => {
     } else if (found.length === 1) {
       // Найдено одно совпадение
       const item = found[0];
-      foundItems[keySerial] = item;
-      setFoundItems(prev => ({ ...prev, [keySerial]: item }));
+      
+      // Проверяем, не является ли это дубликатом уже выбранного оборудования
+      const isDuplicate = rows.some(row => 
+        row.item && row.item.inventoryNumber === item.inventoryNumber
+      );
 
-      const newRow: BufferRow = {
-        id: Date.now().toString(),
-        serial: searchTerm,
-        status: 'found',
-        item: item,
-      };
-      setRows(prev => [...prev, newRow]);
-      setInputValue('');
+      if (isDuplicate) {
+        // Это дубликат - добавляем как дубликат
+        const newRow: BufferRow = {
+          id: Date.now().toString(),
+          serial: searchTerm,
+          status: 'duplicate',
+          item: item,
+        };
+        setRows(prev => [...prev, newRow]);
+        setInputValue('');
+      } else {
+        // Это новое оборудование
+        const newRow: BufferRow = {
+          id: Date.now().toString(),
+          serial: searchTerm,
+          status: 'found',
+          item: item,
+        };
+        setRows(prev => [...prev, newRow]);
+        setInputValue('');
 
-      // Добавляем действие в лог
-      addAction({
-        type: 'import',
-        description: `Добавлено в инвентаризацию: ${item.name} (${item.inventoryNumber})`,
-        entityType: 'Инвентаризация',
-        entityId: item.inventoryNumber,
-        oldData: null,
-        newData: item,
-        canUndo: true,
-      });
+        // Добавляем действие в лог
+        addAction({
+          type: 'import',
+          description: `Добавлено в инвентаризацию: ${item.name} (${item.inventoryNumber})`,
+          entityType: 'Инвентаризация',
+          entityId: item.inventoryNumber,
+          oldData: null,
+          newData: item,
+          canUndo: true,
+        });
+      }
     } else {
-      // Найдено несколько совпадений
+      // Найдено несколько совпадений - всегда показываем диалог выбора
       setSelectionDialog({
         open: true,
         items: found,
         searchTerm: searchTerm,
       });
     }
-  }, [searchEquipmentByNumbers, foundItems, addAction]);
+  }, [searchEquipmentByNumbers, rows, addAction]);
 
   const handleSelectEquipment = useCallback((selectedItem: FoundItem, searchTerm: string) => {
-    const normalizedSearch = searchTerm.replace(/^0+/, '');
-    const keySerial = normalizedSearch;
+    // Проверяем, не является ли это дубликатом уже выбранного оборудования
+    const isDuplicate = rows.some(row => 
+      row.item && row.item.inventoryNumber === selectedItem.inventoryNumber
+    );
 
-    foundItems[keySerial] = selectedItem;
-    setFoundItems(prev => ({ ...prev, [keySerial]: selectedItem }));
+    if (isDuplicate) {
+      // Это дубликат - добавляем как дубликат
+      const newRow: BufferRow = {
+        id: Date.now().toString(),
+        serial: searchTerm,
+        status: 'duplicate',
+        item: selectedItem,
+      };
+      setRows(prev => [...prev, newRow]);
+    } else {
+      // Это новое оборудование
+      const newRow: BufferRow = {
+        id: Date.now().toString(),
+        serial: searchTerm,
+        status: 'found',
+        item: selectedItem,
+      };
+      setRows(prev => [...prev, newRow]);
 
-    const newRow: BufferRow = {
-      id: Date.now().toString(),
-      serial: searchTerm,
-      status: 'found',
-      item: selectedItem,
-    };
-    setRows(prev => [...prev, newRow]);
+      // Добавляем действие в лог только для новых элементов
+      addAction({
+        type: 'import',
+        description: `Добавлено в инвентаризацию: ${selectedItem.name} (${selectedItem.inventoryNumber})`,
+        entityType: 'Инвентаризация',
+        entityId: selectedItem.inventoryNumber,
+        oldData: null,
+        newData: selectedItem,
+        canUndo: true,
+      });
+    }
 
     setSelectionDialog({ open: false, items: [], searchTerm: '' });
     setInputValue('');
-
-    // Добавляем действие в лог
-    addAction({
-      type: 'import',
-      description: `Добавлено в инвентаризацию: ${selectedItem.name} (${selectedItem.inventoryNumber})`,
-      entityType: 'Инвентаризация',
-      entityId: selectedItem.inventoryNumber,
-      oldData: null,
-      newData: selectedItem,
-      canUndo: true,
-    });
-  }, [foundItems, addAction]);
+  }, [rows, addAction]);
 
   const removeRow = useCallback((id: string) => {
     const rowToRemove = rows.find(row => row.id === id);
@@ -265,7 +269,6 @@ const Inventory: React.FC = () => {
     });
 
     setRows([]);
-    setFoundItems({});
     clearInventoryBuffer();
   }, [rows, addAction]);
 
