@@ -13,7 +13,6 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Menu,
   MenuItem,
   InputAdornment,
   Checkbox,
@@ -30,7 +29,7 @@ import {
   MoreVert as MoreIcon,
   DragIndicator as DragIcon,
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../contexts/NotificationContext';
 import BulkOperations from '../components/BulkOperations';
 import ExportData, { ExportOptions } from '../components/ExportData';
@@ -71,19 +70,13 @@ interface Equipment {
   updatedAt: Date;
 }
 
-// Получаем данные из хранилища
-const equipmentData = getEquipment();
-
 const EquipmentList = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { addNotification } = useNotifications();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedType, setSelectedType] = useState('Все');
   const [selectedItems, setSelectedItems] = useState<Equipment[]>([]);
   const [bulkOperationsOpen, setBulkOperationsOpen] = useState(false);
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
@@ -91,14 +84,14 @@ const EquipmentList = () => {
   const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
   const [columnPrefs, setColumnPrefs] = useState<ColumnPref[]>(getColumnPrefs());
   const [filtersDialogOpen, setFiltersDialogOpen] = useState(false);
-  const [conditions, setConditions] = useState<Array<{ field: string; op: 'eq' | 'neq' | 'contains' | 'ncontains' | 'gt' | 'gte' | 'lt' | 'lte'; value: string; operator?: 'AND' | 'OR' }>>([
+  const [conditions, setConditions] = useState<Array<{ field: string; op: 'eq' | 'neq' | 'contains' | 'ncontains' | 'gt' | 'gte' | 'lt' | 'lte'; value: string; operator?: 'AND' | 'OR'; manualValue?: string }>>([
     { field: 'name', op: 'contains', value: '' }
   ]);
-  const [selectedStatus, setSelectedStatus] = useState<string>('Все');
   const [bulkActionField, setBulkActionField] = useState<string | null>(null);
   const [bulkActionOperation, setBulkActionOperation] = useState<string | null>(null);
   const [bulkActionValue, setBulkActionValue] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Ключ для принудительного обновления
   const [columnOrder, setColumnOrder] = useState<EquipmentColumnKey[]>([
     'invNumber', 'type', 'name', 'department', 'status', 'location', 'rack', 'manufacturer', 'model', 'serialNumber', 'purchaseDate', 'warrantyMonths', 'cost', 'comment', 'supplier', 'project', 'user', 'invoiceNumber', 'contractNumber'
   ]);
@@ -109,6 +102,41 @@ const EquipmentList = () => {
     setColumnOrder(currentOrder);
   }, [columnPrefs]);
 
+  // Автоматическое обновление данных
+  React.useEffect(() => {
+    const updateData = () => {
+      // Принудительно обновляем данные
+      setRefreshKey(prev => prev + 1);
+    };
+
+    // Обновляем каждые 10 секунд
+    const interval = setInterval(updateData, 10000);
+
+    // Обновляем при фокусе на окне
+    const handleFocus = () => updateData();
+    window.addEventListener('focus', handleFocus);
+
+    // Обновляем при изменении видимости страницы
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        updateData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Получаем свежие данные при каждом обновлении
+  const equipmentData = React.useMemo(() => {
+    return getEquipment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
   // Функция для генерации описания примененных фильтров
   const getFiltersDescription = () => {
     const activeFilters = [];
@@ -118,18 +146,14 @@ const EquipmentList = () => {
       activeFilters.push(`поиск: "${searchTerm}"`);
     }
     
-    // Фильтр по типу
-    if (selectedType !== 'Все') {
-      activeFilters.push(`тип: "${selectedType}"`);
-    }
-    
-    // Фильтр по статусу
-    if (selectedStatus !== 'Все') {
-      activeFilters.push(`статус: "${selectedStatus}"`);
-    }
-    
     // Расширенные фильтры
-    const activeConditions = conditions.filter(c => c.value && c.value.trim() !== '');
+    const activeConditions = conditions.filter(c => {
+      if (c.value === '__manual__') {
+        return c.manualValue && c.manualValue.trim() !== '';
+      }
+      return c.value && c.value.trim() !== '';
+    });
+    
     if (activeConditions.length > 0) {
       const conditionDescriptions = activeConditions.map((condition, index) => {
         const fieldNames: { [key: string]: string } = {
@@ -168,7 +192,10 @@ const EquipmentList = () => {
         const fieldName = fieldNames[condition.field] || condition.field;
         const operatorName = operatorNames[condition.op] || condition.op;
         
-        let description = `${fieldName} ${operatorName} "${condition.value}"`;
+        // Определяем значение для отображения
+        const displayValue = condition.value === '__manual__' ? condition.manualValue : condition.value;
+        
+        let description = `${fieldName} ${operatorName} "${displayValue}"`;
         
         // Добавляем логический оператор для не первого фильтра
         if (index > 0 && condition.operator) {
@@ -186,18 +213,7 @@ const EquipmentList = () => {
   };
 
 
-  const queryStatus = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get('status');
-  }, [location.search]);
-
-  React.useEffect(() => {
-    if (queryStatus && ['Активно', 'Ремонт', 'На обслуживании', 'Списано'].includes(queryStatus)) {
-      setSelectedStatus(queryStatus);
-    }
-  }, [queryStatus]);
-
-     const types = ['Все', 'Компьютеры', 'Периферия', 'Мониторы', 'Сетевое оборудование', 'Серверы'];
+  const types = ['Все', 'Компьютеры', 'Периферия', 'Мониторы', 'Сетевое оборудование', 'Серверы'];
   const statuses = useMemo(() => getStatuses().map(s => s.name), []);
   const locations = ['Офис ПРМ - Склад', 'Офис ПРМ - Кабинет', 'Офис ПРМ - Серверная', 'Офис МСК - Кабинет руководства', 'Офис СПБ - IT отдел'];
   const users = useMemo(() => getEntities().users?.map(u => u.name) || [], []);
@@ -208,9 +224,8 @@ const EquipmentList = () => {
                          equipment.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          equipment.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          equipment.inventoryNumber.toLowerCase().includes(searchTerm.toLowerCase());
-         const matchesType = selectedType === 'Все' || equipment.type === selectedType;
-    const matchesStatus = selectedStatus === 'Все' || equipment.status === selectedStatus;
-         return matchesSearch && matchesType && matchesStatus;
+    
+    return matchesSearch;
   });
   
   // Применяем расширенные фильтры
@@ -219,11 +234,36 @@ const EquipmentList = () => {
       return true;
     }
     
-    return conditions.every((condition, index) => {
-      if (!condition.value || condition.value.trim() === '') return true;
-      
+    // Фильтруем только активные условия (с заполненными значениями)
+    const activeConditions = conditions.filter(c => {
+      if (c.value === '__manual__') {
+        return c.manualValue && c.manualValue.trim() !== '';
+      }
+      return c.value && c.value.trim() !== '';
+    });
+    
+    if (activeConditions.length === 0) return true;
+    
+    // Применяем фильтры с учетом операторов И/ИЛИ
+    let result = true;
+    
+    for (let i = 0; i < activeConditions.length; i++) {
+      const condition = activeConditions[i];
       const fieldValue = equipment[condition.field as keyof Equipment];
-      if (!fieldValue) return false;
+      
+      if (!fieldValue) {
+        result = false;
+        break;
+      }
+      
+      // Определяем значение для сравнения
+      const compareValue = condition.value === '__manual__' ? condition.manualValue : condition.value;
+      
+      // Проверяем, что значение определено
+      if (!compareValue) {
+        result = false;
+        break;
+      }
       
       let matches = false;
       
@@ -231,60 +271,64 @@ const EquipmentList = () => {
       if (condition.field === 'purchaseDate') {
         // Для дата полей
         const fieldDate = new Date(String(fieldValue));
-        const conditionDate = new Date(condition.value);
+        const conditionDate = new Date(compareValue);
         
-        if (isNaN(fieldDate.getTime()) || isNaN(conditionDate.getTime())) return false;
-        
-        switch (condition.op) {
-          case 'eq':
-            matches = fieldDate.toDateString() === conditionDate.toDateString();
-            break;
-          case 'neq':
-            matches = fieldDate.toDateString() !== conditionDate.toDateString();
-            break;
-          case 'gte':
-            matches = fieldDate >= conditionDate;
-            break;
-          case 'lte':
-            matches = fieldDate <= conditionDate;
-            break;
-          default:
-            matches = true;
+        if (isNaN(fieldDate.getTime()) || isNaN(conditionDate.getTime())) {
+          matches = false;
+        } else {
+          switch (condition.op) {
+            case 'eq':
+              matches = fieldDate.toDateString() === conditionDate.toDateString();
+              break;
+            case 'neq':
+              matches = fieldDate.toDateString() !== conditionDate.toDateString();
+              break;
+            case 'gte':
+              matches = fieldDate >= conditionDate;
+              break;
+            case 'lte':
+              matches = fieldDate <= conditionDate;
+              break;
+            default:
+              matches = true;
+          }
         }
       } else if (['cost', 'warrantyMonths'].includes(condition.field) || 
                  (condition.field === 'inventoryNumber' && ['gt', 'gte', 'lt', 'lte'].includes(condition.op))) {
         // Для числовых полей
         const fieldNum = parseFloat(String(fieldValue));
-        const conditionNum = parseFloat(condition.value);
+        const conditionNum = parseFloat(compareValue);
         
-        if (isNaN(fieldNum) || isNaN(conditionNum)) return false;
-        
-        switch (condition.op) {
-          case 'eq':
-            matches = fieldNum === conditionNum;
-            break;
-          case 'neq':
-            matches = fieldNum !== conditionNum;
-            break;
-          case 'gt':
-            matches = fieldNum > conditionNum;
-            break;
-          case 'gte':
-            matches = fieldNum >= conditionNum;
-            break;
-          case 'lt':
-            matches = fieldNum < conditionNum;
-            break;
-          case 'lte':
-            matches = fieldNum <= conditionNum;
-            break;
-          default:
-            matches = true;
+        if (isNaN(fieldNum) || isNaN(conditionNum)) {
+          matches = false;
+        } else {
+          switch (condition.op) {
+            case 'eq':
+              matches = fieldNum === conditionNum;
+              break;
+            case 'neq':
+              matches = fieldNum !== conditionNum;
+              break;
+            case 'gt':
+              matches = fieldNum > conditionNum;
+              break;
+            case 'gte':
+              matches = fieldNum >= conditionNum;
+              break;
+            case 'lt':
+              matches = fieldNum < conditionNum;
+              break;
+            case 'lte':
+              matches = fieldNum <= conditionNum;
+              break;
+            default:
+              matches = true;
+          }
         }
       } else {
         // Для текстовых полей
         const fieldValueStr = String(fieldValue).toLowerCase();
-        const conditionValue = condition.value.toLowerCase();
+        const conditionValue = compareValue.toLowerCase();
         
         switch (condition.op) {
           case 'eq':
@@ -304,14 +348,24 @@ const EquipmentList = () => {
         }
       }
       
-      // Если это не первый фильтр, применяем логику И/ИЛИ
-      if (index > 0 && conditions[index - 1].operator === 'OR') {
-        // Для OR: если предыдущий фильтр не прошел, этот должен пройти
-        return matches;
+      // Применяем логику И/ИЛИ
+      if (i === 0) {
+        // Первый фильтр - просто устанавливаем результат
+        result = matches;
+      } else {
+        // Последующие фильтры - применяем оператор
+        const previousCondition = activeConditions[i - 1];
+        if (previousCondition.operator === 'OR') {
+          // Для OR: если предыдущий прошел ИЛИ текущий проходит
+          result = result || matches;
+        } else {
+          // Для AND (по умолчанию): если предыдущий прошел И текущий проходит
+          result = result && matches;
+        }
       }
-      
-      return matches;
-    });
+    }
+    
+    return result;
   });
 
   const getStatusColor = (status: string) => {
@@ -562,13 +616,6 @@ const EquipmentList = () => {
               ),
             }}
           />
-          <Button
-            variant="outlined"
-            startIcon={<FilterIcon />}
-            onClick={(e) => setFilterAnchorEl(e.currentTarget)}
-          >
-                         {selectedType}
-          </Button>
           <Button variant="outlined" startIcon={<FilterIcon />} onClick={() => setFiltersDialogOpen(true)}>
             Фильтры
           </Button>
@@ -585,18 +632,6 @@ const EquipmentList = () => {
               Действия ({selectedItems.length})
             </Button>
           )}
-          <TextField
-            select
-            label="Статус"
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            SelectProps={{ native: true }}
-            sx={{ minWidth: 200 }}
-          >
-            {['Все', 'Активно', 'Ремонт', 'На обслуживании', 'Списано'].map((status) => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </TextField>
         </Box>
       </Paper>
 
@@ -874,13 +909,134 @@ const EquipmentList = () => {
                 </TextField>
               ) : (
                 <TextField
+                  select
                   size="small"
                   label="Значение"
                   value={c.value}
                   onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, value: e.target.value}:x))}
                   sx={{ minWidth: 240, flexGrow: 1 }}
-                  type={c.field === 'purchaseDate' ? 'date' : c.field === 'cost' || c.field === 'warrantyMonths' ? 'number' : 'text'}
-                  InputLabelProps={c.field === 'purchaseDate' ? { shrink: true } : {}}
+                  SelectProps={{ native: true }}
+                >
+                  {/* Для всех операторов показываем предустановленные значения для соответствующих полей */}
+                  {c.field === 'status' && (
+                    <>
+                      <option value="">Выберите статус</option>
+                      {statuses.map(status => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'location' && (
+                    <>
+                      <option value="">Выберите местоположение</option>
+                      {locations.map(loc => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'type' && (
+                    <>
+                      <option value="">Выберите тип</option>
+                      {types.filter(t => t !== 'Все').map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'department' && (
+                    <>
+                      <option value="">Выберите департамент</option>
+                      {['IT отдел', 'Отдел продаж', 'Бухгалтерия', 'HR отдел', 'Руководство'].map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'manufacturer' && (
+                    <>
+                      <option value="">Выберите производителя</option>
+                      {['Dell', 'HP', 'Lenovo', 'Samsung', 'Cisco', 'Canon', 'LG'].map(man => (
+                        <option key={man} value={man}>{man}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'model' && (
+                    <>
+                      <option value="">Выберите модель</option>
+                      {['Latitude 5520', 'LaserJet Pro M404n', 'S24F350', 'Catalyst 2960', 'ProLiant DL380', 'ThinkPad X1 Carbon', 'PIXMA TS8320', '27UL850-W'].map(mod => (
+                        <option key={mod} value={mod}>{mod}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'user' && (
+                    <>
+                      <option value="">Выберите пользователя</option>
+                      {users.map(user => (
+                        <option key={user} value={user}>{user}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'rack' && (
+                    <>
+                      <option value="">Выберите стеллаж</option>
+                      {['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3'].map(rack => (
+                        <option key={rack} value={rack}>{rack}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'supplier' && (
+                    <>
+                      <option value="">Выберите поставщика</option>
+                      {['ООО "ТехСнаб"', 'ИП Иванов', 'ЗАО "КомпьютерМир"', 'ООО "IT-Сервис"'].map(supp => (
+                        <option key={supp} value={supp}>{supp}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {c.field === 'project' && (
+                    <>
+                      <option value="">Выберите проект</option>
+                      {['Проект А', 'Проект Б', 'Проект В', 'Внутренний'].map(proj => (
+                        <option key={proj} value={proj}>{proj}</option>
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* Для полей с ручным вводом добавляем опцию ручного ввода */}
+                  {['name', 'serialNumber', 'comment', 'invoiceNumber', 'contractNumber'].includes(c.field) && (
+                    <>
+                      <option value="">Введите вручную</option>
+                      <option value="__manual__">Ручной ввод</option>
+                    </>
+                  )}
+                  
+                  {/* Для числовых полей */}
+                  {['cost', 'warrantyMonths'].includes(c.field) && (
+                    <option value="">Введите число</option>
+                  )}
+                  
+                  {/* Для даты */}
+                  {c.field === 'purchaseDate' && (
+                    <option value="">Выберите дату</option>
+                  )}
+                </TextField>
+              )}
+              
+              {/* Дополнительное поле для ручного ввода, если выбрано "__manual__" */}
+              {c.value === '__manual__' && ['name', 'serialNumber', 'comment', 'invoiceNumber', 'contractNumber'].includes(c.field) && (
+                <TextField
+                  size="small"
+                  label="Введите значение"
+                  value={c.manualValue || ''}
+                  onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, manualValue: e.target.value}:x))}
+                  sx={{ minWidth: 240, flexGrow: 1 }}
+                  placeholder="Введите значение вручную"
                 />
               )}
               
@@ -929,25 +1085,6 @@ const EquipmentList = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Меню фильтров */}
-      <Menu
-        anchorEl={filterAnchorEl}
-        open={Boolean(filterAnchorEl)}
-        onClose={() => setFilterAnchorEl(null)}
-      >
-                 {types.map((type) => (
-          <MenuItem
-             key={type}
-            onClick={() => {
-               setSelectedType(type);
-              setFilterAnchorEl(null);
-            }}
-          >
-             {type}
-          </MenuItem>
-        ))}
-      </Menu>
-
       {/* Таблица оборудования */}
       <Paper sx={{ width: '100%', overflow: 'hidden' }}>
         {/* Описание примененных фильтров */}
@@ -980,8 +1117,6 @@ const EquipmentList = () => {
                   color="secondary"
                   onClick={() => {
                     setSearchTerm('');
-                    setSelectedType('Все');
-                    setSelectedStatus('Все');
                     setConditions([{ field: 'name', op: 'contains', value: '' }]);
                     setPage(0);
                   }}
@@ -1058,7 +1193,18 @@ const EquipmentList = () => {
                     {orderedVisibleColumns.map((key) => (
                       <TableCell key={key}>
                         {key === 'invNumber' && (
-                          <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                          <Typography 
+                            variant="body1" 
+                            sx={{ 
+                              fontWeight: 700, 
+                              cursor: 'pointer',
+                              '&:hover': { 
+                                color: 'primary.main', 
+                                textDecoration: 'underline' 
+                              }
+                            }}
+                            onClick={() => navigate(`/equipment/${equipment.inventoryNumber}`)}
+                          >
                             {equipment.inventoryNumber}
                           </Typography>
                         )}

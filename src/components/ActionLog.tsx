@@ -137,7 +137,7 @@ const ActionLog: React.FC<ActionLogProps> = ({
         onClick={() => setOpen(true)}
         sx={{ 
           position: 'fixed',
-          top: 20,
+          bottom: 20,
           right: 20,
           zIndex: 1200,
           backgroundColor: 'background.paper',
