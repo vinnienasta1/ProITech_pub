@@ -6,7 +6,6 @@ import {
   TextField,
   Button,
   Chip,
-  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -18,7 +17,6 @@ import {
   MenuItem,
   InputAdornment,
   Checkbox,
-  Tooltip,
   Alert,
   FormControl,
   InputLabel,
@@ -27,11 +25,10 @@ import {
 import {
   Search as SearchIcon,
   FilterList as FilterIcon,
-  Edit as EditIcon,
-  Visibility as ViewIcon,
   FileDownload as ExportIcon,
   Settings as SettingsIcon,
   MoreVert as MoreIcon,
+  DragIndicator as DragIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -51,9 +48,6 @@ import {
   ListItemIcon as MListItemIcon,
   ListItemText as MListItemText,
 } from '@mui/material';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
 
 interface Equipment {
   id: string;
@@ -104,6 +98,16 @@ const EquipmentList = () => {
   const [bulkActionField, setBulkActionField] = useState<string | null>(null);
   const [bulkActionOperation, setBulkActionOperation] = useState<string | null>(null);
   const [bulkActionValue, setBulkActionValue] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [columnOrder, setColumnOrder] = useState<EquipmentColumnKey[]>([
+    'invNumber', 'type', 'name', 'department', 'status', 'location', 'rack', 'manufacturer', 'model', 'serialNumber', 'purchaseDate', 'warrantyMonths', 'cost', 'comment', 'supplier', 'project', 'user', 'invoiceNumber', 'contractNumber'
+  ]);
+
+  // Инициализируем порядок столбцов на основе текущих настроек
+  React.useEffect(() => {
+    const currentOrder = columnPrefs.map(c => c.key);
+    setColumnOrder(currentOrder);
+  }, [columnPrefs]);
 
   // Функция для генерации описания примененных фильтров
   const getFiltersDescription = () => {
@@ -412,17 +416,50 @@ const EquipmentList = () => {
     });
   };
 
-  const moveColumn = (key: EquipmentColumnKey, direction: 'up' | 'down') => {
-    setColumnPrefs(prev => {
-      const idx = prev.findIndex(c => c.key === key);
-      if (idx < 0) return prev;
-      const swapWith = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapWith < 0 || swapWith >= prev.length) return prev;
+  // Drag and Drop функции
+  const handleDragStart = (e: React.DragEvent, key: EquipmentColumnKey) => {
+    setIsDragging(true);
+    e.dataTransfer.setData('text/plain', key);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetKey: EquipmentColumnKey) => {
+    e.preventDefault();
+    const draggedKey = e.dataTransfer.getData('text/plain') as EquipmentColumnKey;
+    
+    if (draggedKey === targetKey) return;
+    
+    setColumnOrder(prev => {
+      const draggedIndex = prev.indexOf(draggedKey);
+      const targetIndex = prev.indexOf(targetKey);
+      
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+      
       const next = [...prev];
-      [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
-      saveColumnPrefs(next);
+      const [draggedItem] = next.splice(draggedIndex, 1);
+      next.splice(targetIndex, 0, draggedItem);
+      
+      // Обновляем порядок в columnPrefs
+      const updatedPrefs = next.map(key => {
+        const existing = columnPrefs.find(c => c.key === key);
+        return existing || { key, visible: true };
+      });
+      setColumnPrefs(updatedPrefs);
+      saveColumnPrefs(updatedPrefs);
+      
       return next;
     });
+    
+    setIsDragging(false);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
   };
 
   const orderedVisibleColumns = useMemo(() => columnPrefs.filter(c => c.visible !== false).map(c => c.key), [columnPrefs]);
@@ -532,7 +569,7 @@ const EquipmentList = () => {
           >
                          {selectedType}
           </Button>
-          <Button variant="outlined" startIcon={<FilterAltIcon />} onClick={() => setFiltersDialogOpen(true)}>
+          <Button variant="outlined" startIcon={<FilterIcon />} onClick={() => setFiltersDialogOpen(true)}>
             Фильтры
           </Button>
           <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => setColumnsDialogOpen(true)}>
@@ -567,23 +604,32 @@ const EquipmentList = () => {
         <DialogTitle>Настройка столбцов</DialogTitle>
         <DialogContent>
           <MList>
-                         {(['invNumber','type','name','department','status','location','manufacturer','model','serialNumber','purchaseDate','warrantyExpiry','budget','comment','supplier','project','user'] as EquipmentColumnKey[]).map((key) => (
-              <MListItem key={key} secondaryAction={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <IconButton size="small" onClick={() => moveColumn(key, 'up')}><ArrowUpwardIcon fontSize="small" /></IconButton>
-                  <IconButton size="small" onClick={() => moveColumn(key, 'down')}><ArrowDownwardIcon fontSize="small" /></IconButton>
-                </Box>
-              }>
+            {columnOrder.map((key) => (
+              <MListItem 
+                key={key} 
+                sx={{ 
+                  cursor: 'grab',
+                  '&:active': { cursor: 'grabbing' },
+                  opacity: isDragging ? 0.7 : 1,
+                  transition: 'opacity 0.2s'
+                }}
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, key)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, key)}
+                onDragEnd={handleDragEnd}
+              >
                 <MListItemIcon>
                   <Checkbox edge="start" checked={isVisible(key)} onChange={() => toggleColumn(key)} />
                 </MListItemIcon>
                 <MListItemText primary={
                   key==='invNumber'?'Инв номер':
+                  key==='type'?'Тип':
                   key==='name'?'Название':
                   key==='department'?'Департамент':
-                  
                   key==='status'?'Статус':
                   key==='location'?'Местоположение':
+                  key==='rack'?'Стеллаж':
                   key==='manufacturer'?'Производитель':
                   key==='model'?'Модель':
                   key==='serialNumber'?'Серийный номер':
@@ -592,8 +638,20 @@ const EquipmentList = () => {
                   key==='cost'?'Стоимость':
                   key==='comment'?'Комментарий':
                   key==='supplier'?'Поставщик':
-                  key==='project'?'Проект':'Пользователь'
+                  key==='project'?'Проект':
+                  key==='user'?'Пользователь':
+                  key==='invoiceNumber'?'Номер счета':
+                  key==='contractNumber'?'Номер договора':''
                 } />
+                <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
+                  <DragIcon 
+                    sx={{ 
+                      color: 'text.secondary', 
+                      cursor: 'grab',
+                      '&:active': { cursor: 'grabbing' }
+                    }} 
+                  />
+                </Box>
               </MListItem>
             ))}
           </MList>
@@ -605,17 +663,24 @@ const EquipmentList = () => {
 
       <Dialog open={filtersDialogOpen} onClose={() => setFiltersDialogOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>Расширенные фильтры</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ minHeight: '400px' }}>
           {conditions.map((c, idx) => (
-            <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
+            <Box key={idx} sx={{ 
+              display: 'flex', 
+              gap: 2, 
+              mb: 3, 
+              alignItems: 'flex-start',
+              flexWrap: 'nowrap',
+              '&:last-child': { mb: 0 }
+            }}>
               {/* Показываем условие И/ИЛИ для не первого фильтра */}
               {idx > 0 && (
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Условие</InputLabel>
+                <FormControl size="small" sx={{ minWidth: 140, flexShrink: 0 }}>
+                  <InputLabel>Логика</InputLabel>
                   <Select
                     value={c.operator || 'AND'}
                     onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, operator: e.target.value as 'AND' | 'OR'}:x))}
-                    label="Условие"
+                    label="Логика"
                   >
                     <MenuItem value="AND">И (AND)</MenuItem>
                     <MenuItem value="OR">ИЛИ (OR)</MenuItem>
@@ -623,13 +688,16 @@ const EquipmentList = () => {
                 </FormControl>
               )}
               
+              {/* Пустое место для выравнивания первого фильтра */}
+              {idx === 0 && <Box sx={{ width: 140, flexShrink: 0 }} />}
+              
               <TextField
                 select
                 size="small"
                 label="Поле"
                 value={c.field}
                 onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, field: e.target.value}:x))}
-                sx={{ minWidth: 180 }}
+                sx={{ minWidth: 200, flexShrink: 0 }}
                 SelectProps={{ native: true }}
               >
                 {/* Основная информация */}
@@ -675,19 +743,19 @@ const EquipmentList = () => {
               <TextField
                 select
                 size="small"
-                label="Условие"
+                label="Оператор"
                 value={c.op}
                 onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, op: e.target.value as any, value: ''}:x))}
-                sx={{ minWidth: 180 }}
+                sx={{ minWidth: 160, flexShrink: 0 }}
                 SelectProps={{ native: true }}
               >
                 {/* Условия для текстовых полей */}
                 {['name', 'type', 'location', 'status', 'manufacturer', 'model', 'serialNumber', 'department', 'rack', 'user', 'supplier', 'project', 'invoiceNumber', 'contractNumber', 'comment'].includes(c.field) && (
                   <>
-                <option value="eq">Равно</option>
-                <option value="neq">Не равно</option>
-                <option value="contains">Содержит</option>
-                <option value="ncontains">Не содержит</option>
+                    <option value="eq">Равно</option>
+                    <option value="neq">Не равно</option>
+                    <option value="contains">Содержит</option>
+                    <option value="ncontains">Не содержит</option>
                   </>
                 )}
                 
@@ -736,7 +804,7 @@ const EquipmentList = () => {
                   label="Значение"
                   value={c.value}
                   onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, value: e.target.value}:x))}
-                  sx={{ minWidth: 220 }}
+                  sx={{ minWidth: 240, flexGrow: 1 }}
                   SelectProps={{ native: true }}
                 >
                   {/* Предустановленные значения для статусов */}
@@ -749,6 +817,16 @@ const EquipmentList = () => {
                     <option key={loc} value={loc}>{loc}</option>
                   ))}
                   
+                  {/* Предустановленные значения для типов */}
+                  {c.field === 'type' && types.filter(t => t !== 'Все').map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                  
+                  {/* Предустановленные значения для департаментов */}
+                  {c.field === 'department' && ['IT отдел', 'Отдел продаж', 'Бухгалтерия', 'HR отдел', 'Руководство'].map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                  
                   {/* Предустановленные значения для производителей */}
                   {c.field === 'manufacturer' && ['Dell', 'HP', 'Lenovo', 'Samsung', 'Cisco', 'Canon', 'LG'].map(man => (
                     <option key={man} value={man}>{man}</option>
@@ -759,8 +837,28 @@ const EquipmentList = () => {
                     <option key={mod} value={mod}>{mod}</option>
                   ))}
                   
+                  {/* Предустановленные значения для пользователей */}
+                  {c.field === 'user' && users.map(user => (
+                    <option key={user} value={user}>{user}</option>
+                  ))}
+                  
+                  {/* Предустановленные значения для стеллажей */}
+                  {c.field === 'rack' && ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3'].map(rack => (
+                    <option key={rack} value={rack}>{rack}</option>
+                  ))}
+                  
+                  {/* Предустановленные значения для поставщиков */}
+                  {c.field === 'supplier' && ['ООО "ТехСнаб"', 'ИП Иванов', 'ЗАО "КомпьютерМир"', 'ООО "IT-Сервис"'].map(supp => (
+                    <option key={supp} value={supp}>{supp}</option>
+                  ))}
+                  
+                  {/* Предустановленные значения для проектов */}
+                  {c.field === 'project' && ['Проект А', 'Проект Б', 'Проект В', 'Внутренний'].map(proj => (
+                    <option key={proj} value={proj}>{proj}</option>
+                  ))}
+                  
                   {/* Поля для ручного ввода */}
-                  {['name', 'serialNumber', 'comment', 'supplier', 'project', 'invoiceNumber', 'contractNumber', 'user', 'rack', 'department', 'type'].includes(c.field) && (
+                  {['name', 'serialNumber', 'comment', 'invoiceNumber', 'contractNumber'].includes(c.field) && (
                     <option value="">Введите вручную</option>
                   )}
                   
@@ -780,29 +878,54 @@ const EquipmentList = () => {
                   label="Значение"
                   value={c.value}
                   onChange={(e) => setConditions(prev => prev.map((x,i)=> i===idx?{...x, value: e.target.value}:x))}
-                  sx={{ minWidth: 220 }}
+                  sx={{ minWidth: 240, flexGrow: 1 }}
                   type={c.field === 'purchaseDate' ? 'date' : c.field === 'cost' || c.field === 'warrantyMonths' ? 'number' : 'text'}
                   InputLabelProps={c.field === 'purchaseDate' ? { shrink: true } : {}}
                 />
               )}
               
-              <Button size="small" color="error" onClick={() => setConditions(prev => prev.filter((_,i)=>i!==idx))} disabled={conditions.length === 1}>
+              <Button 
+                size="small" 
+                color="error" 
+                onClick={() => setConditions(prev => prev.filter((_,i)=>i!==idx))} 
+                disabled={conditions.length === 1}
+                sx={{ flexShrink: 0, minWidth: 80 }}
+              >
                 Удалить
               </Button>
             </Box>
           ))}
           
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-            <Button size="small" onClick={() => setConditions(prev => [...prev, { field: 'name', op: 'contains', value: '', operator: 'AND' }])}>
-              Добавить фильтр
+          <Box sx={{ 
+            display: 'flex', 
+            gap: 2, 
+            mt: 3, 
+            pt: 2, 
+            borderTop: '1px solid', 
+            borderColor: 'divider',
+            justifyContent: 'center'
+          }}>
+            <Button 
+              size="medium" 
+              variant="outlined"
+              onClick={() => setConditions(prev => [...prev, { field: 'name', op: 'contains', value: '', operator: 'AND' }])}
+            >
+              + Добавить фильтр
             </Button>
-            <Button size="small" onClick={() => setConditions([{ field: 'name', op: 'contains', value: '' }])}>
-              Сбросить
+            <Button 
+              size="medium" 
+              variant="outlined"
+              color="secondary"
+              onClick={() => setConditions([{ field: 'name', op: 'contains', value: '' }])}
+            >
+              Сбросить все
             </Button>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setFiltersDialogOpen(false)} variant="contained">Готово</Button>
+          <Button onClick={() => setFiltersDialogOpen(false)} variant="contained" size="large">
+            Применить фильтры
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -832,14 +955,40 @@ const EquipmentList = () => {
           const activeFilters = getFiltersDescription();
           if (activeFilters.length > 0) {
             return (
-              <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'grey.50' }}>
-                <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <FilterAltIcon fontSize="small" />
-                  Отфильтровано: {activeFilters.join(', ')}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                  Найдено записей: {filteredWithAdvanced.length} из {equipmentData.length}
-                </Typography>
+              <Box sx={{ 
+                p: 2, 
+                borderBottom: '1px solid', 
+                borderColor: 'divider', 
+                backgroundColor: 'background.paper',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 2
+              }}>
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <FilterIcon fontSize="small" />
+                    Отфильтровано: {activeFilters.join(', ')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    Найдено записей: {filteredWithAdvanced.length} из {equipmentData.length}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="secondary"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedType('Все');
+                    setSelectedStatus('Все');
+                    setConditions([{ field: 'name', op: 'contains', value: '' }]);
+                    setPage(0);
+                  }}
+                  sx={{ flexShrink: 0 }}
+                >
+                  Очистить фильтры
+                </Button>
               </Box>
             );
           }
@@ -858,7 +1007,17 @@ const EquipmentList = () => {
                   />
                 </TableCell>
                 {orderedVisibleColumns.map((key) => (
-                  <TableCell key={key} sx={{ fontWeight: key==='invNumber'?700:600 }}>
+                  <TableCell
+                    key={key}
+                    sx={{ fontWeight: key==='invNumber'?700:600 }}
+                    draggable={true}
+                    onDragStart={(e) => handleDragStart(e, key)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, key)}
+                    onDragEnd={handleDragEnd}
+                    onDragLeave={(e) => e.preventDefault()}
+                    onDragEnter={(e) => e.preventDefault()}
+                  >
                     {
                       key==='invNumber'?'Инв. номер':
                       key==='type'?'Тип':
@@ -867,6 +1026,7 @@ const EquipmentList = () => {
    
                       key==='status'?'Статус':
                       key==='location'?'Местоположение':
+                      key==='rack'?'Стеллаж':
                       key==='manufacturer'?'Производитель':
                       key==='model'?'Модель':
                       key==='serialNumber'?'Серийный номер':
@@ -876,11 +1036,12 @@ const EquipmentList = () => {
                       key==='comment'?'Комментарий':
                       key==='supplier'?'Поставщик':
                       key==='project'?'Проект':
-                      key==='user'?'Пользователь':''
+                      key==='user'?'Пользователь':
+                      key==='invoiceNumber'?'Номер счета':
+                      key==='contractNumber'?'Номер договора':''
                     }
                   </TableCell>
                 ))}
-                <TableCell sx={{ fontWeight: 600 }}>Действия</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -919,6 +1080,7 @@ const EquipmentList = () => {
                           <Chip label={equipment.status} color={getStatusColor(equipment.status) as any} size="small" />
                         ) : ''}
                         {key === 'location' && equipment.location}
+                        {key === 'rack' && equipment.rack}
                         {key === 'manufacturer' && equipment.manufacturer}
                         {key === 'model' && equipment.model}
                         {key === 'serialNumber' && (
@@ -933,31 +1095,10 @@ const EquipmentList = () => {
                         {key === 'supplier' && equipment.supplier}
                         {key === 'project' && equipment.project}
                         {key === 'user' && equipment.user}
+                        {key === 'invoiceNumber' && equipment.invoiceNumber}
+                        {key === 'contractNumber' && equipment.contractNumber}
                       </TableCell>
                     ))}
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Редактировать">
-                          <IconButton
-                            size="small"
-                            onClick={() => navigate(`/equipment/edit/${equipment.inventoryNumber}`)}
-                            color="primary"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Просмотреть">
-                          <IconButton 
-                            size="small" 
-                            color="info"
-                            onClick={() => navigate(`/equipment/${equipment.inventoryNumber}`)}
-                          >
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-
-                      </Box>
-                    </TableCell>
                   </TableRow>
                 ))}
             </TableBody>
