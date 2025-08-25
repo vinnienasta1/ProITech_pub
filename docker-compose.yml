@@ -9,6 +9,4 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-    volumes:
-      - ./logs/nginx:/var/log/nginx
 
