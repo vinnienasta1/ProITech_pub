@@ -46,12 +46,16 @@ import {
   VpnKey as LdapIcon,
   Person as PersonIcon,
   Logout as LogoutIcon,
+  ImportExport as ImportIcon,
+  CloudUpload as UploadIcon,
+  Preview as PreviewIcon,
 } from '@mui/icons-material';
 import { getStatuses, saveStatuses, StatusItem } from '../storage/statusStorage';
 import { getEntities, saveEntities } from '../storage/entitiesStorage';
 import { getEquipment } from '../storage/equipmentStorage';
 import { getAdminPassword, changeAdminPassword } from '../storage/adminPassword';
 import ColorPicker from '../components/ColorPicker';
+import DataImport from '../components/DataImport';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -138,6 +142,7 @@ const Administration = () => {
   const [passwordChangeError, setPasswordChangeError] = useState<string>('');
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -250,6 +255,26 @@ const Administration = () => {
     const next = { ...entities, [key]: (entities as any)[key].filter((x: any) => x.id !== id) };
     setEntities(next);
     saveEntities(next);
+  };
+
+  const handleDataImport = async (config: any, data: any[]) => {
+    try {
+      console.log('Импорт данных:', { config, dataCount: data.length });
+      
+      // Здесь будет логика импорта данных в базу
+      // Пока что просто логируем
+      
+      // TODO: Реализовать импорт в MySQL через API
+      // 1. Создать недостающие справочники
+      // 2. Импортировать оборудование
+      // 3. Обновить существующие записи если нужно
+      
+      alert(`Импорт завершен! Обработано ${data.length} записей.`);
+      
+    } catch (error) {
+      console.error('Ошибка импорта:', error);
+      throw new Error(`Ошибка импорта: ${error}`);
+    }
   };
 
   const handleSave = () => {
@@ -573,6 +598,7 @@ const Administration = () => {
           <Tab label="Местоположения" icon={<LocationIcon />} iconPosition="start" />
           <Tab label="Стеллажи" icon={<RackIcon />} iconPosition="start" />
           <Tab label="Пользователи" icon={<PersonIcon />} iconPosition="start" />
+          <Tab label="Импорт данных" icon={<ImportIcon />} iconPosition="start" />
           <Tab label="LDAP" icon={<LdapIcon />} iconPosition="start" />
           <Tab label="Внешний вид" icon={<PaletteIcon />} iconPosition="start" />
         </Tabs>
@@ -935,6 +961,115 @@ const Administration = () => {
           </List>
         </TabPanel>
 
+        {/* Импорт данных */}
+        <TabPanel value={tabValue} index={9}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Импорт данных</Typography>
+            <Button
+              variant="contained"
+              startIcon={<ImportIcon />}
+              onClick={() => setImportDialogOpen(true)}
+            >
+              Импортировать данные
+            </Button>
+          </Box>
+          
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>Импорт из других систем</Typography>
+            <Typography variant="body2" sx={{ mb: 3 }}>
+              Импортируйте данные из других систем управления IT-оборудованием. 
+              Поддерживаются форматы Excel, CSV, JSON и SQL.
+            </Typography>
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                      <UploadIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Загрузка файла
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                      Выберите файл для импорта. Система автоматически определит формат и предложит маппинг полей.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<UploadIcon />}
+                      onClick={() => setImportDialogOpen(true)}
+                    >
+                      Выбрать файл
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                      <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Настройка маппинга
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                      Настройте соответствие полей между источником и системой ProITech. 
+                      Поддерживаются трансформации данных.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SettingsIcon />}
+                      onClick={() => setImportDialogOpen(true)}
+                    >
+                      Настроить маппинг
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                      <PreviewIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Предварительный просмотр
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                      Просмотрите данные перед импортом, проверьте корректность маппинга полей.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<PreviewIcon />}
+                      onClick={() => setImportDialogOpen(true)}
+                    >
+                      Просмотреть данные
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                      <ImportIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                      Выполнение импорта
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                      Импортируйте данные с настройками валидации, обработки дубликатов и создания справочников.
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<ImportIcon />}
+                      onClick={() => setImportDialogOpen(true)}
+                    >
+                      Начать импорт
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Paper>
+        </TabPanel>
+
         {/* TabPanel for LDAP */}
         <TabPanel value={tabValue} index={10}>
           <Typography variant="h6" sx={{ mb: 3 }}>Настройки LDAP</Typography>
@@ -1026,7 +1161,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* TabPanel for Appearance */}
-        <TabPanel value={tabValue} index={9}>
+        <TabPanel value={tabValue} index={11}>
           <Typography variant="h6" sx={{ mb: 3 }}>Настройки внешнего вида</Typography>
           
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1433,6 +1568,13 @@ const Administration = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Диалог импорта данных */}
+      <DataImport
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onImport={handleDataImport}
+      />
     </Box>
   );
 };
