@@ -177,6 +177,81 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
         // JSON файл
         const text = await file.text();
         data = JSON.parse(text);
+      } else if (file.name.endsWith('.sql')) {
+        // SQL файл - простой парсинг INSERT statements
+        const text = await file.text();
+        console.log('SQL file size:', text.length, 'characters');
+        
+        // Ищем все INSERT INTO statements
+        const insertMatches = text.match(/INSERT\s+INTO\s+`?(\w+)`?\s*\(([^)]+)\)\s*VALUES\s*([^;]+);/gi);
+        console.log('Found INSERT statements:', insertMatches?.length || 0);
+        
+        if (insertMatches && insertMatches.length > 0) {
+          // Берем первый INSERT для определения структуры
+          const firstMatch = insertMatches[0];
+          const columnMatch = firstMatch.match(/\(([^)]+)\)/);
+          const valuesMatch = firstMatch.match(/VALUES\s*([^;]+)/);
+          
+          if (columnMatch && valuesMatch) {
+            const columns = columnMatch[1].split(',').map((col: string) => col.trim().replace(/`/g, ''));
+            console.log('Columns found:', columns);
+            
+            // Обрабатываем все INSERT statements
+            data = insertMatches.map((match, index) => {
+              const valuesMatch = match.match(/VALUES\s*([^;]+)/);
+              if (valuesMatch) {
+                const values = valuesMatch[1].split(',').map((val: string) => val.trim().replace(/['"]/g, ''));
+                
+                const obj: any = {};
+                columns.forEach((col, colIndex) => {
+                  if (values[colIndex] !== undefined) {
+                    obj[col] = values[colIndex];
+                  }
+                });
+                return obj;
+              }
+              return null;
+            }).filter(Boolean);
+            
+            console.log('Parsed records:', data.length);
+          }
+        }
+        
+        // Если не удалось распарсить, пробуем альтернативный подход
+        if (data.length === 0) {
+          console.log('Trying alternative SQL parsing...');
+          
+          // Ищем строки с данными в формате (val1, val2, val3)
+          const dataMatches = text.match(/\(([^)]+)\)/g);
+          if (dataMatches) {
+            console.log('Found data rows:', dataMatches.length);
+            
+            // Пытаемся найти заголовки таблицы
+            const tableMatch = text.match(/CREATE\s+TABLE\s+`?(\w+)`?\s*\(([^)]+)\)/i);
+            if (tableMatch) {
+              const columns = tableMatch[2].split(',').map((col: string) => {
+                const colName = col.trim().split(/\s+/)[0].replace(/`/g, '');
+                return colName;
+              });
+              console.log('Table columns from CREATE TABLE:', columns);
+              
+              // Создаем объекты из найденных данных
+              data = dataMatches.slice(0, 100).map((match, index) => { // Ограничиваем первыми 100 записями
+                const values = match.replace(/[()]/g, '').split(',').map((val: string) => val.trim().replace(/['"]/g, ''));
+                
+                const obj: any = {};
+                columns.forEach((col, colIndex) => {
+                  if (values[colIndex] !== undefined) {
+                    obj[col] = values[colIndex];
+                  }
+                });
+                return obj;
+              });
+            }
+          }
+        }
+        
+        console.log('Final SQL parsing result:', { dataLength: data.length, sampleData: data.slice(0, 2) });
       }
 
       setFileData(data);
