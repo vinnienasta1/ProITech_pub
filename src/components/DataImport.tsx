@@ -5,7 +5,6 @@ import {
   Typography,
   Button,
   TextField,
-  Grid,
   Card,
   CardContent,
   FormControl,
@@ -432,13 +431,13 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                         </Button>
                       </Box>
                       
-                      <Grid container spacing={2}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {importConfig.fieldMappings.map((mapping, mapIndex) => (
-                          <Grid item xs={12} key={mapIndex}>
+                          <Box key={mapIndex}>
                             <Card variant="outlined">
                               <CardContent>
-                                <Grid container spacing={2} alignItems="center">
-                                  <Grid item xs={4}>
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  <Box sx={{ flex: '1 1 200px', minWidth: 200 }}>
                                     <TextField
                                       fullWidth
                                       label="Поле источника"
@@ -446,9 +445,9 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                                       onChange={(e) => handleFieldMappingChange(mapIndex, 'sourceField', e.target.value)}
                                       size="small"
                                     />
-                                  </Grid>
+                                  </Box>
                                   
-                                  <Grid item xs={4}>
+                                  <Box sx={{ flex: '1 1 200px', minWidth: 200 }}>
                                     <FormControl fullWidth size="small">
                                       <InputLabel>Поле назначения</InputLabel>
                                       <Select
@@ -463,9 +462,9 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                                         ))}
                                       </Select>
                                     </FormControl>
-                                  </Grid>
+                                  </Box>
                                   
-                                  <Grid item xs={3}>
+                                  <Box sx={{ flex: '1 1 150px', minWidth: 150 }}>
                                     <FormControl fullWidth size="small">
                                       <InputLabel>Трансформация</InputLabel>
                                       <Select
@@ -481,17 +480,17 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                                         <MenuItem value="number">Число</MenuItem>
                                       </Select>
                                     </FormControl>
-                                  </Grid>
+                                  </Box>
                                   
-                                  <Grid item xs={1}>
+                                  <Box sx={{ flex: '0 0 auto' }}>
                                     <IconButton
                                       color="error"
                                       onClick={() => removeFieldMapping(mapIndex)}
                                     >
                                       <DeleteIcon />
                                     </IconButton>
-                                  </Grid>
-                                </Grid>
+                                  </Box>
+                                </Box>
                                 
                                 <Box sx={{ mt: 1 }}>
                                   <FormControlLabel
@@ -517,9 +516,9 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                                 </Box>
                               </CardContent>
                             </Card>
-                          </Grid>
+                          </Box>
                         ))}
-                      </Grid>
+                      </Box>
                       
                       <Box sx={{ mt: 2 }}>
                         <Button
@@ -595,8 +594,8 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                         Настройки импорта
                       </Typography>
                       
-                      <Grid container spacing={2}>
-                        <Grid item xs={6}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                        <Box sx={{ flex: '1 1 250px', minWidth: 250 }}>
                           <FormControlLabel
                             control={
                               <Checkbox
@@ -606,9 +605,9 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                             }
                             label="Пропускать дубликаты"
                           />
-                        </Grid>
+                        </Box>
                         
-                        <Grid item xs={6}>
+                        <Box sx={{ flex: '1 1 250px', minWidth: 250 }}>
                           <FormControlLabel
                             control={
                               <Checkbox
@@ -618,9 +617,9 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                             }
                             label="Обновлять существующие записи"
                           />
-                        </Grid>
+                        </Box>
                         
-                        <Grid item xs={6}>
+                        <Box sx={{ flex: '1 1 250px', minWidth: 250 }}>
                           <FormControlLabel
                             control={
                               <Checkbox
@@ -630,9 +629,9 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                             }
                             label="Создавать недостающие справочники"
                           />
-                        </Grid>
+                        </Box>
                         
-                        <Grid item xs={6}>
+                        <Box sx={{ flex: '1 1 250px', minWidth: 250 }}>
                           <TextField
                             fullWidth
                             label="Размер пакета"
@@ -644,8 +643,8 @@ const DataImport: React.FC<DataImportProps> = ({ open, onClose, onImport }) => {
                             }))}
                             size="small"
                           />
-                        </Grid>
-                      </Grid>
+                        </Box>
+                      </Box>
                       
                       {success && (
                         <Alert severity="success" sx={{ mt: 2 }}>

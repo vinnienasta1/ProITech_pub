@@ -981,8 +981,8 @@ const Administration = () => {
               Поддерживаются форматы Excel, CSV, JSON и SQL.
             </Typography>
             
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+              <Box sx={{ flex: '1 1 300px', minWidth: 300 }}>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 2 }}>
@@ -1001,9 +1001,9 @@ const Administration = () => {
                     </Button>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Box>
               
-              <Grid item xs={12} md={6}>
+              <Box sx={{ flex: '1 1 300px', minWidth: 300 }}>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 2 }}>
@@ -1023,9 +1023,9 @@ const Administration = () => {
                     </Button>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Box>
               
-              <Grid item xs={12} md={6}>
+              <Box sx={{ flex: '1 1 300px', minWidth: 300 }}>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 2 }}>
@@ -1044,9 +1044,9 @@ const Administration = () => {
                     </Button>
                   </CardContent>
                 </Card>
-              </Grid>
+              </Box>
               
-              <Grid item xs={12} md={6}>
+              <Box sx={{ flex: '1 1 300px', minWidth: 300 }}>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 2 }}>
@@ -1065,8 +1065,8 @@ const Administration = () => {
                     </Button>
                   </CardContent>
                 </Card>
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
           </Paper>
         </TabPanel>
 

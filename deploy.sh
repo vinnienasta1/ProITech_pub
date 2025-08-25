@@ -1,4 +1,4 @@
-#!/bin/bash
+    #!/bin/bash
 
 # Скрипт для управления ProITech проектом с MySQL
 # Использование: ./deploy.sh [start|stop|restart|status|logs|update|build|mysql]
