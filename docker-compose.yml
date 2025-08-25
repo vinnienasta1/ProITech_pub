@@ -1,6 +1,43 @@
 version: '3.8'
 
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: proitech-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: proitech_root_password
+      MYSQL_DATABASE: proitech_db
+      MYSQL_USER: proitech_user
+      MYSQL_PASSWORD: proitech_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - proitech-network
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: proitech-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=proitech_db
+      - DB_USER=proitech_user
+      - DB_PASSWORD=proitech_password
+      - JWT_SECRET=your_jwt_secret_key_here
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mysql
+    networks:
+      - proitech-network
+
   proitech-app:
     build: .
     ports:
@@ -9,4 +46,16 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      - REACT_APP_API_URL=http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - proitech-network
+
+volumes:
+  mysql_data:
+
+networks:
+  proitech-network:
+    driver: bridge
 
