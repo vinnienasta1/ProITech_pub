@@ -927,7 +927,7 @@ const Administration = () => {
         </TabPanel>
 
         {/* Пользователи */}
-        <TabPanel value={tabValue} index={11}>
+        <TabPanel value={tabValue} index={8}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">Пользователи</Typography>
             <Button
